@@ -67,6 +67,7 @@ export interface UserProfile {
   banner: string;
   subscribers: number;
   gems: number;
+  balance: number;
   bio: string;
   website?: string;
   projects: Project[];

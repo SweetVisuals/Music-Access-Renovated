@@ -323,11 +323,11 @@ const NotesPage: React.FC = () => {
             <div className="w-64 border-r border-neutral-800 flex flex-col bg-[#080808]">
                 <div className="p-4 border-b border-neutral-800">
                      <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
-                        <FileText size={14} className="text-blue-400" />
+                        <FileText size={14} className="text-primary" />
                         My Notebook
                      </h3>
                      <div className="relative mb-4">
-                         <input className="w-full bg-neutral-900 border border-neutral-800 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500/50 pl-8" placeholder="Search notes..." />
+                         <input className="w-full bg-neutral-900 border border-neutral-800 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-primary/50 pl-8" placeholder="Search notes..." />
                          <FileText size={12} className="absolute left-2.5 top-2.5 text-neutral-500" />
                      </div>
                 </div>
@@ -340,15 +340,15 @@ const NotesPage: React.FC = () => {
                             className={`
                                 p-3 rounded-lg border cursor-pointer transition-all group relative
                                 ${activeNoteId === note.id 
-                                    ? 'bg-blue-500/10 border-blue-500/20' 
+                                    ? 'bg-primary/10 border-primary/20' 
                                     : 'border-transparent hover:bg-white/5'
                                 }
                             `}
                         >
                             <div className="flex justify-between items-start mb-1">
-                                <h4 className={`text-sm font-bold truncate pr-4 ${activeNoteId === note.id ? 'text-blue-400' : 'text-neutral-300'}`}>{note.title}</h4>
+                                <h4 className={`text-sm font-bold truncate pr-4 ${activeNoteId === note.id ? 'text-primary' : 'text-neutral-300'}`}>{note.title}</h4>
                                 {note.attachedAudio && (
-                                    <Headphones size={12} className={activeNoteId === note.id ? 'text-blue-400' : 'text-neutral-600'} />
+                                    <Headphones size={12} className={activeNoteId === note.id ? 'text-primary' : 'text-neutral-600'} />
                                 )}
                             </div>
                             <p className="text-xs text-neutral-500 line-clamp-1 mb-2">{note.preview || 'No content'}</p>

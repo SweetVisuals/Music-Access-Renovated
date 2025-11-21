@@ -23,7 +23,8 @@ import {
   ShoppingBag,
   LayoutGrid,
   Disc,
-  ChevronRight
+  ChevronRight,
+  LogIn
 } from 'lucide-react';
 import { View } from '../types';
 import { MOCK_TALENT } from '../constants';
@@ -31,9 +32,11 @@ import { MOCK_TALENT } from '../constants';
 interface SidebarProps {
   currentView: View;
   onNavigate: (view: View) => void;
+  isLoggedIn: boolean;
+  onOpenAuth: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate }) => {
+const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, isLoggedIn, onOpenAuth }) => {
   const isDashboard = currentView.startsWith('dashboard');
 
   return (
@@ -57,7 +60,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate }) => {
       <div className="flex-1 py-6 px-4 overflow-y-auto custom-scrollbar space-y-8">
         
         {isDashboard ? (
-            /* --- DASHBOARD SIDEBAR LAYOUT --- */
+            /* --- DASHBOARD SIDEBAR LAYOUT (Only visible when logged in) --- */
             <>
                 {/* Back to Marketplace */}
                 <div>
@@ -199,16 +202,18 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate }) => {
         ) : (
             /* --- MARKETPLACE SIDEBAR LAYOUT --- */
             <>
-                {/* QUICK ACTIONS */}
-                <div>
-                    <div className="text-[10px] font-bold text-neutral-500 px-3 mb-2 uppercase tracking-widest">
-                        Quick Actions
+                {/* QUICK ACTIONS (Logged In Only) */}
+                {isLoggedIn && (
+                    <div>
+                        <div className="text-[10px] font-bold text-neutral-500 px-3 mb-2 uppercase tracking-widest">
+                            Quick Actions
+                        </div>
+                        <nav className="space-y-0.5">
+                            <SidebarAction icon={<Upload size={16} />} label="Upload Track" onClick={() => onNavigate('upload')} />
+                            <SidebarAction icon={<PlusCircle size={16} />} label="New Project" onClick={() => onNavigate('dashboard-studio')} />
+                        </nav>
                     </div>
-                    <nav className="space-y-0.5">
-                        <SidebarAction icon={<Upload size={16} />} label="Upload Track" onClick={() => onNavigate('upload')} />
-                        <SidebarAction icon={<PlusCircle size={16} />} label="New Project" onClick={() => onNavigate('dashboard-studio')} />
-                    </nav>
-                </div>
+                )}
 
                 {/* NAVIGATION */}
                 <div>
@@ -234,93 +239,101 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate }) => {
                             active={currentView === 'collaborate'}
                             onClick={() => onNavigate('collaborate')}
                         />
-                        <SidebarItem 
-                            icon={<Headphones size={16} />} 
-                            label="My Studio" 
-                            onClick={() => onNavigate('dashboard-studio')}
-                        />
-                        <SidebarItem 
-                            icon={<Briefcase size={16} />} 
-                            label="Manage Orders" 
-                            onClick={() => onNavigate('dashboard-manage')}
-                        />
+                        {isLoggedIn && (
+                            <>
+                                <SidebarItem 
+                                    icon={<Headphones size={16} />} 
+                                    label="My Studio" 
+                                    onClick={() => onNavigate('dashboard-studio')}
+                                />
+                                <SidebarItem 
+                                    icon={<Briefcase size={16} />} 
+                                    label="Manage Orders" 
+                                    onClick={() => onNavigate('dashboard-manage')}
+                                />
+                            </>
+                        )}
                     </nav>
                 </div>
 
-                {/* FOLLOWING */}
-                <div>
-                    <div className="flex items-center justify-between px-3 mb-2 group cursor-pointer" onClick={() => onNavigate('browse-talent')}>
-                        <div className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest group-hover:text-neutral-300 transition-colors">
-                            Following
+                {/* FOLLOWING (Logged In Only) */}
+                {isLoggedIn && (
+                    <div>
+                        <div className="flex items-center justify-between px-3 mb-2 group cursor-pointer" onClick={() => onNavigate('browse-talent')}>
+                            <div className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest group-hover:text-neutral-300 transition-colors">
+                                Following
+                            </div>
+                            <span className="text-[9px] font-mono font-bold text-neutral-600 bg-neutral-900 border border-neutral-800 px-1.5 py-0.5 rounded">
+                                {MOCK_TALENT.length}
+                            </span>
                         </div>
-                        <span className="text-[9px] font-mono font-bold text-neutral-600 bg-neutral-900 border border-neutral-800 px-1.5 py-0.5 rounded">
-                            {MOCK_TALENT.length}
-                        </span>
-                    </div>
-                    <div className="space-y-1 mb-6">
-                        {MOCK_TALENT.slice(0, 4).map((talent) => (
-                             <div 
-                                key={talent.id}
+                        <div className="space-y-1 mb-6">
+                            {MOCK_TALENT.slice(0, 4).map((talent) => (
+                                 <div 
+                                    key={talent.id}
+                                    onClick={() => onNavigate('browse-talent')}
+                                    className="w-full flex items-center gap-3 px-3 py-2 hover:bg-white/5 rounded-lg group transition-all text-left cursor-pointer"
+                                 >
+                                    <div className="relative shrink-0">
+                                        <img src={talent.avatar} alt={talent.username} className="w-8 h-8 rounded-md object-cover border border-white/10 group-hover:border-white/30 transition-colors" />
+                                        {talent.isVerified && (
+                                            <div className="absolute -bottom-1 -right-1 bg-[#050505] rounded-full p-[1.5px]">
+                                                <div className="w-2 h-2 bg-primary rounded-full"></div>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="flex-1 min-w-0 overflow-hidden">
+                                        <div className="text-xs font-bold text-neutral-400 group-hover:text-white truncate transition-colors">{talent.username}</div>
+                                        <div className="text-[10px] text-neutral-600 font-mono truncate group-hover:text-neutral-500 transition-colors">{talent.handle}</div>
+                                    </div>
+                                    <button 
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onNavigate('dashboard-messages');
+                                        }}
+                                        className="p-1.5 text-neutral-500 hover:text-white hover:bg-white/10 rounded-md transition-all"
+                                    >
+                                        <MessageSquare size={12} />
+                                    </button>
+                                 </div>
+                            ))}
+                            <button 
                                 onClick={() => onNavigate('browse-talent')}
-                                className="w-full flex items-center gap-3 px-3 py-2 hover:bg-white/5 rounded-lg group transition-all text-left cursor-pointer"
-                             >
-                                <div className="relative shrink-0">
-                                    <img src={talent.avatar} alt={talent.username} className="w-8 h-8 rounded-md object-cover border border-white/10 group-hover:border-white/30 transition-colors" />
-                                    {talent.isVerified && (
-                                        <div className="absolute -bottom-1 -right-1 bg-[#050505] rounded-full p-[1.5px]">
-                                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="flex-1 min-w-0 overflow-hidden">
-                                    <div className="text-xs font-bold text-neutral-400 group-hover:text-white truncate transition-colors">{talent.username}</div>
-                                    <div className="text-[10px] text-neutral-600 font-mono truncate group-hover:text-neutral-500 transition-colors">{talent.handle}</div>
-                                </div>
-                                <button 
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        onNavigate('dashboard-messages');
-                                    }}
-                                    className="p-1.5 text-neutral-500 hover:text-white hover:bg-white/10 rounded-md transition-all"
-                                >
-                                    <MessageSquare size={12} />
-                                </button>
-                             </div>
-                        ))}
-                        <button 
-                            onClick={() => onNavigate('browse-talent')}
-                            className="w-full flex items-center justify-between px-3 py-2 text-[10px] font-bold text-neutral-600 hover:text-white transition-colors group border-t border-white/5 mt-2"
-                        >
-                            <span>View all creators</span>
-                            <ChevronRight size={12} className="group-hover:translate-x-1 transition-transform" />
-                        </button>
+                                className="w-full flex items-center justify-between px-3 py-2 text-[10px] font-bold text-neutral-600 hover:text-white transition-colors group border-t border-white/5 mt-2"
+                            >
+                                <span>View all creators</span>
+                                <ChevronRight size={12} className="group-hover:translate-x-1 transition-transform" />
+                            </button>
+                        </div>
                     </div>
-                </div>
+                )}
 
-                {/* LIBRARY */}
-                <div>
-                    <div className="text-[10px] font-bold text-neutral-500 px-3 mb-2 uppercase tracking-widest">
-                        Library
+                {/* LIBRARY (Logged In Only) */}
+                {isLoggedIn && (
+                    <div>
+                        <div className="text-[10px] font-bold text-neutral-500 px-3 mb-2 uppercase tracking-widest">
+                            Library
+                        </div>
+                        <nav className="space-y-0.5">
+                            <SidebarItem 
+                                icon={<LayoutGrid size={16} />} 
+                                label="My Library" 
+                                active={currentView === 'library'}
+                                onClick={() => onNavigate('library')}
+                            />
+                            <SidebarItem 
+                                icon={<FileText size={16} />} 
+                                label="Contracts" 
+                                onClick={() => onNavigate('contracts')}
+                            />
+                            <SidebarItem 
+                                icon={<Clipboard size={16} />} 
+                                label="Notes" 
+                                onClick={() => onNavigate('notes')}
+                            />
+                        </nav>
                     </div>
-                    <nav className="space-y-0.5">
-                        <SidebarItem 
-                            icon={<LayoutGrid size={16} />} 
-                            label="My Library" 
-                            active={currentView === 'library'}
-                            onClick={() => onNavigate('library')}
-                        />
-                        <SidebarItem 
-                            icon={<FileText size={16} />} 
-                            label="Contracts" 
-                            onClick={() => onNavigate('contracts')}
-                        />
-                        <SidebarItem 
-                            icon={<Clipboard size={16} />} 
-                            label="Notes" 
-                            onClick={() => onNavigate('notes')}
-                        />
-                    </nav>
-                </div>
+                )}
 
                 {/* RESOURCES */}
                 <div>
@@ -347,38 +360,61 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate }) => {
 
       </div>
 
-      {/* Footer - Storage & Profile */}
+      {/* Footer - Storage & Profile or Guest */}
       <div className="p-4 border-t border-neutral-800 bg-[#080808]">
           
-          {/* Storage Info */}
-          <div className="mb-4 px-1">
-             <div className="flex justify-between items-end mb-2">
-                 <span className="text-[10px] font-medium text-neutral-400">Storage</span>
-                 <span className="text-[9px] font-mono text-neutral-500 font-bold">16.6 MB / 500.0 MB</span>
-             </div>
-             <div className="h-1 w-full bg-neutral-800 rounded-full overflow-hidden">
-                 <div className="h-full bg-white w-[3%] rounded-full"></div>
-             </div>
-          </div>
+          {isLoggedIn ? (
+              <>
+                {/* Storage Info */}
+                <div className="mb-4 px-1">
+                    <div className="flex justify-between items-end mb-2">
+                        <span className="text-[10px] font-medium text-neutral-400">Storage</span>
+                        <span className="text-[9px] font-mono text-neutral-500 font-bold">16.6 MB / 500.0 MB</span>
+                    </div>
+                    <div className="h-1 w-full bg-neutral-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-white w-[3%] rounded-full"></div>
+                    </div>
+                </div>
 
-          <div className="h-px bg-neutral-800 mb-4"></div>
+                <div className="h-px bg-neutral-800 mb-4"></div>
 
-          {/* User Profile */}
-          <div className="flex items-center gap-3 group cursor-pointer hover:bg-white/5 p-2 -mx-2 rounded-lg transition-colors" onClick={() => onNavigate('profile')}>
-             {/* Avatar - Square */}
-             <div className="h-9 w-9 rounded-md bg-blue-500/20 border border-blue-500/30 flex items-center justify-center overflow-hidden relative shrink-0">
-                 <img src="https://i.pravatar.cc/150?u=admin1" alt="Admin" className="h-full w-full object-cover" />
-             </div>
-             
-             <div className="flex-1 min-w-0">
-                 <div className="text-xs font-bold text-white truncate group-hover:text-primary transition-colors">Admin1</div>
-                 <div className="text-[10px] text-neutral-500 truncate font-mono">acedkmgmt@gmail.com</div>
-             </div>
+                {/* User Profile */}
+                <div className="flex items-center gap-3 group cursor-pointer hover:bg-white/5 p-2 -mx-2 rounded-lg transition-colors" onClick={() => onNavigate('profile')}>
+                    {/* Avatar - Square */}
+                    <div className="h-9 w-9 rounded-md bg-blue-500/20 border border-blue-500/30 flex items-center justify-center overflow-hidden relative shrink-0">
+                        <img src="https://i.pravatar.cc/150?u=admin1" alt="Admin" className="h-full w-full object-cover" />
+                    </div>
+                    
+                    <div className="flex-1 min-w-0">
+                        <div className="text-xs font-bold text-white truncate group-hover:text-primary transition-colors">Admin1</div>
+                        <div className="text-[10px] text-neutral-500 truncate font-mono">acedkmgmt@gmail.com</div>
+                    </div>
 
-             <button className="text-neutral-500 hover:text-white transition-colors">
-                 <MoreVertical size={14} />
-             </button>
-          </div>
+                    <button className="text-neutral-500 hover:text-white transition-colors">
+                        <MoreVertical size={14} />
+                    </button>
+                </div>
+              </>
+          ) : (
+              /* GUEST FOOTER */
+              <div className="p-2 bg-white/5 rounded-xl border border-white/5">
+                  <div className="flex items-center gap-3 mb-3">
+                      <div className="w-8 h-8 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-500 border border-neutral-700">
+                          <Users size={16} />
+                      </div>
+                      <div>
+                          <div className="text-xs font-bold text-white">Guest User</div>
+                          <div className="text-[9px] text-neutral-500">Sign in to unlock features</div>
+                      </div>
+                  </div>
+                  <button 
+                    onClick={onOpenAuth}
+                    className="w-full py-2 bg-white text-black font-bold rounded-lg text-xs flex items-center justify-center gap-2 hover:bg-neutral-200 transition-colors"
+                  >
+                      <LogIn size={14} /> Log In / Sign Up
+                  </button>
+              </div>
+          )}
       </div>
     </aside>
   );

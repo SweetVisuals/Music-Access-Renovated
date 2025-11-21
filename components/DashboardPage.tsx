@@ -1,7 +1,5 @@
-
-
 import React, { useState } from 'react';
-import { View, Project, Purchase } from '../types';
+import { View, Project, Purchase, UserProfile } from '../types';
 import { 
   DollarSign, 
   ShoppingCart, 
@@ -48,6 +46,7 @@ interface DashboardPageProps {
     isPlaying: boolean;
     onPlayTrack: (project: Project, trackId: string) => void;
     onTogglePlay: () => void;
+    userProfile: UserProfile;
 }
 
 const CHART_DATA: Record<string, { label: string, data: number[], unit: string }> = {
@@ -65,7 +64,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     currentTrackId,
     isPlaying,
     onPlayTrack,
-    onTogglePlay
+    onTogglePlay,
+    userProfile
 }) => {
   const [selectedStat, setSelectedStat] = useState('revenue');
   
@@ -114,8 +114,18 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
           <div className="bg-gradient-to-br from-neutral-900 to-black border border-white/10 rounded-2xl p-8 mb-8 relative overflow-hidden">
                <div className="absolute top-0 right-0 p-32 bg-primary/5 rounded-full blur-3xl"></div>
                <div className="relative z-10">
-                   <div className="text-neutral-500 font-mono text-sm uppercase tracking-widest mb-2">Total Balance</div>
-                   <div className="text-5xl font-black text-white mb-6">$4,520.50</div>
+                   <div className="flex gap-8">
+                        <div>
+                            <div className="text-neutral-500 font-mono text-sm uppercase tracking-widest mb-2">Total Balance</div>
+                            <div className="text-5xl font-black text-white mb-6">$4,520.50</div>
+                        </div>
+                        <div className="pl-8 border-l border-white/10">
+                            <div className="text-neutral-500 font-mono text-sm uppercase tracking-widest mb-2">Gem Balance</div>
+                            <div className="text-5xl font-black text-primary mb-6 flex items-center gap-2">
+                                {userProfile.gems.toLocaleString()} <Gem size={32} />
+                            </div>
+                        </div>
+                   </div>
                    <div className="flex gap-4">
                        <button className="px-6 py-3 bg-primary text-black font-bold rounded-lg hover:bg-primary/90">Withdraw Funds</button>
                        <button className="px-6 py-3 bg-white/5 text-white font-bold rounded-lg hover:bg-white/10 border border-white/10">View Statement</button>
@@ -267,7 +277,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
       );
   }
 
-  // Default: Overview (The code from the original DashboardPage)
+  // Default: Overview
   const currentChart = CHART_DATA[selectedStat] || CHART_DATA['revenue'];
   
   return (
@@ -345,7 +355,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
            />
            <StatCard 
               title="Gems Balance" 
-              value="4,520" 
+              value={userProfile.gems.toLocaleString()} 
               icon={<Gem size={20} />}
               subtext="Approx. $45.20"
               color="text-purple-400"

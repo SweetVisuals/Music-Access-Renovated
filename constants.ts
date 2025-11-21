@@ -151,6 +151,7 @@ export const MOCK_USER_PROFILE: UserProfile = {
     banner: "https://picsum.photos/1200/300?grayscale&blur=2",
     subscribers: 12500,
     gems: 4520,
+    balance: 4520.50,
     bio: "Creating music for the experience. Managed by @PlugTheNation",
     website: "https://coldspark.org",
     projects: MOCK_PROJECTS.slice(0, 3), // Owns first 3 projects
