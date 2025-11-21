@@ -4,21 +4,42 @@ export interface Track {
   title: string;
   duration: number; // in seconds
   waveformData?: number[];
+  // File references (mock IDs or URLs)
+  files?: {
+    mp3?: string;
+    wav?: string;
+    stems?: string;
+  };
+}
+
+export interface LicenseInfo {
+  id: string;
+  type: 'MP3' | 'WAV' | 'STEMS' | 'UNLIMITED';
+  name: string;
+  price: number;
+  contractId?: string; // ID of the contract template
+  features: string[];
+  fileTypesIncluded: ('MP3' | 'WAV' | 'STEMS')[];
 }
 
 export interface Project {
   id: string;
   title: string;
   producer: string;
-  // coverImage removed as per request
-  price: number;
+  coverImage?: string; // Optional now
+  price: number; // Display price (usually lowest license)
   bpm: number;
   key: string;
   genre: string;
+  subGenre?: string;
+  type: 'beat_tape' | 'sound_pack'; // Distinguished type
   tags: string[];
   tracks: Track[];
   description?: string;
-  notes?: string; // Added for studio management
+  notes?: string;
+  licenses?: LicenseInfo[]; // Available licenses for this project
+  status?: 'draft' | 'published';
+  created?: string;
 }
 
 export interface Service {
@@ -41,6 +62,7 @@ export interface SoundPack {
 export interface UserProfile {
   username: string;
   handle: string;
+  location?: string;
   avatar: string;
   banner: string;
   subscribers: number;
@@ -125,7 +147,18 @@ export interface Order {
   status: 'pending' | 'active' | 'delivered' | 'completed' | 'cancelled';
   deadline: string;
   requirements: string;
-  files?: { name: string; size: string; }[];
+  files?: { name: string; size: string }[];
+}
+
+export interface Purchase {
+    id: string;
+    date: string;
+    item: string;
+    seller: string;
+    amount: number;
+    status: 'Completed' | 'Processing' | 'Failed';
+    image: string;
+    type: 'Beat License' | 'Sound Kit' | 'Mixing' | 'Service';
 }
 
 export interface Contract {
@@ -166,9 +199,10 @@ export type View =
   | 'post-service'
   | 'notes'
   | 'contracts'
-  | 'browse-talent' // New
-  | 'collaborate'   // New
-  | 'library'       // New
+  | 'browse-talent' 
+  | 'collaborate'   
+  | 'library'       
+  | 'checkout'      
   | 'dashboard-overview'
   | 'dashboard-studio'
   | 'dashboard-sales'
@@ -178,4 +212,8 @@ export type View =
   | 'dashboard-messages'
   | 'dashboard-analytics'
   | 'dashboard-settings'
-  | 'dashboard-help';
+  | 'dashboard-help'
+  | 'settings'
+  | 'help'
+  | 'terms'
+  | 'privacy';

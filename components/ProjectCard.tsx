@@ -1,7 +1,9 @@
+
 import React, { useState } from 'react';
 import { Play, Pause, MoreVertical, Cpu, Gem, ShoppingCart, Bookmark, Sparkles, Clock } from 'lucide-react';
 import { Project } from '../types';
 import { generateCreativeDescription } from '../services/geminiService';
+import PurchaseModal from './PurchaseModal';
 
 interface ProjectCardProps {
   project: Project;
@@ -15,6 +17,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, currentTrackId, isPl
   const [description, setDescription] = useState<string | null>(null);
   const [loadingDesc, setLoadingDesc] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
 
   const handleAnalyze = async () => {
     if (description) {
@@ -28,6 +31,13 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, currentTrackId, isPl
   };
 
   return (
+    <>
+    <PurchaseModal 
+        isOpen={purchaseModalOpen}
+        onClose={() => setPurchaseModalOpen(false)}
+        project={project}
+        onAddToCart={(item) => console.log('Added to cart', item)}
+    />
     <div 
         className="group h-full flex flex-col bg-neutral-950/50 border border-neutral-800/60 rounded-xl overflow-hidden hover:border-primary/40 transition-all duration-300 hover:shadow-[0_0_30px_rgba(var(--primary),0.05)] relative backdrop-blur-sm"
         onMouseEnter={() => setIsHovered(true)}
@@ -165,12 +175,16 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, currentTrackId, isPl
              <button className="p-1.5 text-neutral-500 hover:text-white hover:bg-white/5 rounded transition-colors">
                  <Bookmark size={12} />
              </button>
-             <button className="p-1.5 text-neutral-500 hover:text-white hover:bg-white/5 rounded transition-colors">
+             <button 
+                onClick={(e) => { e.stopPropagation(); setPurchaseModalOpen(true); }}
+                className="p-1.5 text-neutral-500 hover:text-primary hover:bg-white/5 rounded transition-colors"
+            >
                  <ShoppingCart size={12} />
              </button>
          </div>
       </div>
     </div>
+    </>
   );
 };
 

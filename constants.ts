@@ -1,8 +1,35 @@
 
-import { Project, UserProfile, Order, Conversation, Contract, Note, TalentProfile, CollabService } from './types';
+import { Project, UserProfile, Order, Conversation, Contract, Note, TalentProfile, CollabService, Purchase, LicenseInfo } from './types';
 
 export const GENRES = ["All Genres", "Trap", "Boom Bap", "R&B", "Drill", "Lofi", "Afrobeat", "Synthwave"];
 export const KEYS = ["All Keys", "Am", "Cm", "Em", "F#m", "Gm", "Bbm"];
+
+const DEFAULT_LICENSES: LicenseInfo[] = [
+    {
+        id: 'l1',
+        type: 'MP3',
+        name: 'Basic Lease',
+        price: 29.99,
+        features: ['MP3 File', '2,000 Streams', 'Non-Profit Use'],
+        fileTypesIncluded: ['MP3']
+    },
+    {
+        id: 'l2',
+        type: 'WAV',
+        name: 'Premium Lease',
+        price: 49.99,
+        features: ['WAV + MP3', '50,000 Streams', 'Commercial Use'],
+        fileTypesIncluded: ['WAV', 'MP3']
+    },
+    {
+        id: 'l3',
+        type: 'STEMS',
+        name: 'Exclusive Rights',
+        price: 499.99,
+        features: ['All Stems', 'Unlimited Streams', 'Full Ownership Transfer'],
+        fileTypesIncluded: ['STEMS', 'WAV', 'MP3']
+    }
+];
 
 export const MOCK_PROJECTS: Project[] = [
   {
@@ -13,7 +40,9 @@ export const MOCK_PROJECTS: Project[] = [
     bpm: 140,
     key: 'Em',
     genre: 'Trap',
+    type: 'beat_tape',
     tags: ['Dark', 'Night', 'Hard'],
+    licenses: DEFAULT_LICENSES,
     tracks: [
         { id: 't1', title: 'Neon Rain', duration: 185 },
         { id: 't2', title: 'Subway Drift', duration: 160 },
@@ -30,7 +59,9 @@ export const MOCK_PROJECTS: Project[] = [
     bpm: 85,
     key: 'Cm',
     genre: 'R&B',
+    type: 'beat_tape',
     tags: ['Smooth', 'Vocal', 'Chill'],
+    licenses: DEFAULT_LICENSES,
     tracks: [
         { id: 't3', title: 'Morning Coffee', duration: 200 },
         { id: 't2_2', title: 'Velvet Touch', duration: 210 },
@@ -46,7 +77,9 @@ export const MOCK_PROJECTS: Project[] = [
     bpm: 142,
     key: 'Gm',
     genre: 'Drill',
+    type: 'beat_tape',
     tags: ['Aggressive', 'UK', 'Bass'],
+    licenses: DEFAULT_LICENSES,
     tracks: [
         { id: 't4', title: 'Opp Block', duration: 170 },
         { id: 't3_2', title: 'Slide', duration: 165 },
@@ -63,7 +96,9 @@ export const MOCK_PROJECTS: Project[] = [
     bpm: 110,
     key: 'Am',
     genre: 'Synthwave',
+    type: 'beat_tape',
     tags: ['Retro', '80s', 'Driving'],
+    licenses: DEFAULT_LICENSES,
     tracks: [
         { id: 't5', title: 'Sunset Grid', duration: 220 },
         { id: 't4_2', title: 'Cyber Chase', duration: 205 },
@@ -78,7 +113,9 @@ export const MOCK_PROJECTS: Project[] = [
     bpm: 90,
     key: 'F#m',
     genre: 'Boom Bap',
+    type: 'beat_tape',
     tags: ['Vinyl', 'Sample', 'Classic'],
+    licenses: DEFAULT_LICENSES,
     tracks: [
         { id: 't6', title: 'Scratch Theory', duration: 190 },
         { id: 't5_2', title: 'Jazz Loop', duration: 185 },
@@ -94,7 +131,9 @@ export const MOCK_PROJECTS: Project[] = [
     bpm: 70,
     key: 'Bbm',
     genre: 'Lofi',
+    type: 'beat_tape',
     tags: ['Study', 'Relax', 'Sleep'],
+    licenses: DEFAULT_LICENSES,
     tracks: [
         { id: 't7', title: 'Rainy Window', duration: 140 },
         { id: 't6_2', title: 'Cat Nap', duration: 130 },
@@ -107,6 +146,7 @@ export const MOCK_PROJECTS: Project[] = [
 export const MOCK_USER_PROFILE: UserProfile = {
     username: "Mani Raé",
     handle: "@ManiRae",
+    location: "Toronto, Canada",
     avatar: "https://i.pravatar.cc/150?u=mani",
     banner: "https://picsum.photos/1200/300?grayscale&blur=2",
     subscribers: 12500,
@@ -184,6 +224,59 @@ export const MOCK_ORDERS: Order[] = [
   }
 ];
 
+export const MOCK_PURCHASES: Purchase[] = [
+    {
+        id: 'PUR-1024',
+        date: 'Oct 24, 2025',
+        item: 'Midnight Tokio (Unlimited Lease)',
+        seller: 'WavGod',
+        amount: 199.99,
+        status: 'Completed',
+        image: 'https://picsum.photos/id/13/200',
+        type: 'Beat License'
+    },
+    {
+        id: 'PUR-1023',
+        date: 'Oct 22, 2025',
+        item: 'Analog Synths Vol. 1',
+        seller: 'Mani Raé',
+        amount: 34.99,
+        status: 'Completed',
+        image: 'https://picsum.photos/id/24/200',
+        type: 'Sound Kit'
+    },
+    {
+        id: 'PUR-1022',
+        date: 'Oct 15, 2025',
+        item: 'Vocal Mixing Service',
+        seller: 'MixMaster J',
+        amount: 150.00,
+        status: 'Processing',
+        image: 'https://picsum.photos/id/32/200',
+        type: 'Service'
+    },
+    {
+        id: 'PUR-1021',
+        date: 'Sep 30, 2025',
+        item: 'Drill Essentials',
+        seller: 'DrillMaster',
+        amount: 25.00,
+        status: 'Completed',
+        image: 'https://picsum.photos/id/45/200',
+        type: 'Sound Kit'
+    },
+    {
+        id: 'PUR-1020',
+        date: 'Sep 28, 2025',
+        item: 'Morning Coffee (Exclusive)',
+        seller: 'BeatSmith',
+        amount: 499.00,
+        status: 'Completed',
+        image: 'https://picsum.photos/id/55/200',
+        type: 'Beat License'
+    }
+];
+
 export const MOCK_MESSAGES: Conversation[] = [
   {
     id: 'c1',
@@ -211,48 +304,48 @@ export const MOCK_MESSAGES: Conversation[] = [
 export const MOCK_CONTRACTS: Contract[] = [
   { 
       id: 'ct1', 
-      title: 'TESTING AUDIO', 
-      type: 'audio', 
+      title: 'Standard Lease Agreement', 
+      type: 'lease', 
       status: 'draft', 
       created: '04/09/2025',
       royaltySplit: 50,
       revenueSplit: 50,
-      terms: 'THESE ARE TERMS AND CONDITIONS',
-      publisherName: 'PUBLISH NAME',
-      notes: 'NOTES FOR SPLITS',
-      distNotes: 'DIST NOTES',
-      pubNotes: 'PUB NOTES'
-  },
-  { 
-      id: 'ct2', 
-      title: 'MY CONTACT', 
-      type: 'audio', 
-      status: 'draft', 
-      created: '07/10/2025',
-      royaltySplit: 50,
-      revenueSplit: 50,
-      terms: 'Standard lease agreement terms apply.',
-      publisherName: 'N/A',
-      notes: 'No special splits',
+      terms: 'Standard terms for MP3/WAV leasing.',
+      publisherName: 'Mani Rae Pub',
+      notes: '',
       distNotes: 'Worldwide',
       pubNotes: 'None'
   },
   { 
-      id: 'ct3', 
-      title: 'Exclusive Rights - Midnight Tokio', 
+      id: 'ct2', 
+      title: 'Exclusive Rights Agreement', 
       type: 'exclusive', 
+      status: 'draft', 
+      created: '07/10/2025',
+      royaltySplit: 20,
+      revenueSplit: 100,
+      terms: 'Full buyout terms. Producer retains writer share.',
+      publisherName: 'N/A',
+      notes: 'No special splits',
+      distNotes: 'Exclusive',
+      pubNotes: 'None'
+  },
+  { 
+      id: 'ct3', 
+      title: 'Mixing Service Contract', 
+      type: 'service', 
       status: 'signed', 
       created: '15/08/2025', 
       clientName: 'Big Records',
-      royaltySplit: 20,
+      royaltySplit: 0,
       revenueSplit: 100,
-      terms: 'Full exclusive rights transfer. Producer retains no ownership.',
+      terms: 'Work for hire.',
       publisherName: 'Big Records Pub',
       producerSignature: 'Mani Rae',
       clientSignature: 'Big CEO',
       notes: 'Buyout',
-      distNotes: 'Exclusive',
-      pubNotes: 'Transfer completed'
+      distNotes: 'N/A',
+      pubNotes: 'N/A'
   }
 ];
 

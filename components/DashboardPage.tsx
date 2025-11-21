@@ -1,9 +1,7 @@
 
-import React from 'react';
-import { View, Project } from '../types';
-import DashboardOverview from './DashboardPage'; // This will actually be the internal name if I kept the file but I am replacing the content.
-// To avoid circular dependency or confusion, I'm implementing the layout here.
-// The previous DashboardPage content is now considered the "Overview"
+
+import React, { useState } from 'react';
+import { View, Project, Purchase } from '../types';
 import { 
   DollarSign, 
   ShoppingCart, 
@@ -23,17 +21,58 @@ import {
   Settings,
   Calendar,
   CreditCard,
-  ArrowUpRight
+  ArrowUpRight,
+  Download,
+  Package,
+  Music,
+  Mic2,
+  Disc,
+  MessageSquare,
+  ArrowLeft,
+  Clock,
+  CheckCircle,
+  Paperclip,
+  Send,
+  Link,
+  X,
+  Terminal
 } from 'lucide-react';
 import Studio from './Studio';
+import { MOCK_PURCHASES } from '../constants';
 
 interface DashboardPageProps {
     view: View;
     projects: Project[];
     setProjects: React.Dispatch<React.SetStateAction<Project[]>>;
+    currentTrackId: string | null;
+    isPlaying: boolean;
+    onPlayTrack: (project: Project, trackId: string) => void;
+    onTogglePlay: () => void;
 }
 
-const DashboardPage: React.FC<DashboardPageProps> = ({ view, projects, setProjects }) => {
+const CHART_DATA: Record<string, { label: string, data: number[], unit: string }> = {
+  revenue: { label: 'Revenue Analytics', data: [40, 65, 45, 80, 55, 70, 60, 90, 75, 85, 65, 95], unit: '$' },
+  listeners: { label: 'Live Listener Analytics', data: [20, 35, 40, 45, 50, 55, 60, 55, 65, 70, 75, 80], unit: '' },
+  plays: { label: 'Play Analytics', data: [60, 55, 70, 65, 80, 75, 85, 90, 85, 95, 90, 100], unit: '' },
+  orders: { label: 'Order Analytics', data: [10, 15, 12, 18, 14, 20, 18, 25, 22, 28, 24, 30], unit: '' },
+  gems: { label: 'Gem Balance History', data: [30, 32, 35, 38, 40, 42, 45, 48, 50, 52, 55, 58], unit: '' }
+}
+
+const DashboardPage: React.FC<DashboardPageProps> = ({ 
+    view, 
+    projects, 
+    setProjects,
+    currentTrackId,
+    isPlaying,
+    onPlayTrack,
+    onTogglePlay
+}) => {
+  const [selectedStat, setSelectedStat] = useState('revenue');
+  
+  // State for Purchases/Orders View
+  const [activePurchaseTab, setActivePurchaseTab] = useState<'all' | 'beats' | 'kits' | 'services'>('all');
+  const [selectedOrder, setSelectedOrder] = useState<Purchase | null>(null);
+  const [viewingReceipt, setViewingReceipt] = useState<Purchase | null>(null);
 
   // --- SUB-COMPONENTS FOR SIMPLE VIEWS ---
   
@@ -112,7 +151,14 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ view, projects, setProjec
   // --- ROUTING ---
 
   if (view === 'dashboard-studio') {
-      return <Studio projects={projects} setProjects={setProjects} />;
+      return <Studio 
+        projects={projects} 
+        setProjects={setProjects} 
+        currentTrackId={currentTrackId}
+        isPlaying={isPlaying}
+        onPlayTrack={onPlayTrack}
+        onTogglePlay={onTogglePlay}
+      />;
   }
 
   if (view === 'dashboard-sales') {
@@ -124,19 +170,105 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ view, projects, setProjec
   }
 
   if (view === 'dashboard-orders') {
-       return (
-           <div className="w-full max-w-[1600px] mx-auto p-8">
-               <h1 className="text-3xl font-black text-white mb-6">My Purchases</h1>
-               <p className="text-neutral-500 mb-8">Access your purchased beats and sound kits.</p>
-               <div className="bg-[#0a0a0a] border border-neutral-800 rounded-xl p-12 text-center">
-                   <ShoppingCart size={48} className="mx-auto text-neutral-800 mb-4" />
-                   <p className="text-neutral-500">No orders found in history.</p>
+      if (selectedOrder) {
+          return <CustomerOrderDetail purchase={selectedOrder} onBack={() => setSelectedOrder(null)} />;
+      }
+
+      const filteredPurchases = MOCK_PURCHASES.filter(p => {
+          if (activePurchaseTab === 'all') return true;
+          if (activePurchaseTab === 'beats') return p.type === 'Beat License';
+          if (activePurchaseTab === 'kits') return p.type === 'Sound Kit';
+          if (activePurchaseTab === 'services') return p.type === 'Service' || p.type === 'Mixing';
+          return true;
+      });
+
+      return (
+          <div className="w-full max-w-[1600px] mx-auto pb-32 pt-6 px-6 lg:px-8 animate-in fade-in duration-500 relative">
+               {viewingReceipt && (
+                   <ReceiptModal purchase={viewingReceipt} onClose={() => setViewingReceipt(null)} />
+               )}
+
+               <div className="flex flex-col md:flex-row justify-between items-end mb-8 gap-4">
+                   <div>
+                        <h1 className="text-3xl font-black text-white mb-2">My Purchases</h1>
+                        <p className="text-neutral-500 text-sm">Manage your orders, download files, and communicate with sellers.</p>
+                   </div>
+                   <div className="flex bg-neutral-900 p-1 rounded-lg border border-neutral-800">
+                        <TabButton active={activePurchaseTab === 'all'} onClick={() => setActivePurchaseTab('all')} label="All Items" />
+                        <TabButton active={activePurchaseTab === 'beats'} onClick={() => setActivePurchaseTab('beats')} label="Beats & Projects" />
+                        <TabButton active={activePurchaseTab === 'kits'} onClick={() => setActivePurchaseTab('kits')} label="Sound Packs" />
+                        <TabButton active={activePurchaseTab === 'services'} onClick={() => setActivePurchaseTab('services')} label="Services & Orders" />
+                   </div>
                </div>
-           </div>
-       );
+
+               <div className="grid grid-cols-1 gap-4">
+                   {filteredPurchases.map(purchase => (
+                       <div key={purchase.id} className="bg-[#0a0a0a] border border-neutral-800 rounded-xl p-4 flex flex-col md:flex-row items-center gap-6 hover:border-white/10 transition-colors group">
+                           {/* Image */}
+                           <div className="w-full md:w-24 h-24 bg-neutral-900 rounded-lg overflow-hidden shrink-0 border border-white/5 relative">
+                               <img src={purchase.image} className="w-full h-full object-cover" alt={purchase.item} />
+                               <div className="absolute inset-0 bg-black/20"></div>
+                               <div className="absolute inset-0 flex items-center justify-center">
+                                  {purchase.type === 'Beat License' ? <Music size={24} className="text-white opacity-80" /> :
+                                   purchase.type === 'Sound Kit' ? <Package size={24} className="text-white opacity-80" /> :
+                                   <Mic2 size={24} className="text-white opacity-80" />}
+                               </div>
+                           </div>
+
+                           {/* Info */}
+                           <div className="flex-1 min-w-0 text-center md:text-left">
+                               <div className="flex items-center justify-center md:justify-start gap-2 mb-1">
+                                   <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border ${
+                                       purchase.type.includes('Service') || purchase.type === 'Mixing' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                                       purchase.type === 'Sound Kit' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+                                       'bg-green-500/10 text-green-400 border-green-500/20'
+                                   }`}>
+                                       {purchase.type}
+                                   </span>
+                                   <span className="text-[10px] text-neutral-500 font-mono">{purchase.date}</span>
+                               </div>
+                               <h3 className="text-lg font-bold text-white mb-1">{purchase.item}</h3>
+                               <p className="text-sm text-neutral-400">Sold by <span className="text-white">{purchase.seller}</span></p>
+                           </div>
+
+                           {/* Price & Status */}
+                           <div className="text-center md:text-right px-4 md:border-l border-neutral-800 min-w-[120px]">
+                               <div className="text-xl font-mono font-bold text-white mb-1">${purchase.amount.toFixed(2)}</div>
+                               <div className={`text-[10px] font-bold uppercase ${purchase.status === 'Completed' ? 'text-green-500' : purchase.status === 'Processing' ? 'text-blue-400' : 'text-red-500'}`}>
+                                  {purchase.status}
+                               </div>
+                           </div>
+
+                           {/* Actions */}
+                           <div className="flex flex-col gap-2 w-full md:w-auto min-w-[140px]">
+                               {purchase.type.includes('Service') || purchase.type === 'Mixing' ? (
+                                   <button 
+                                       onClick={() => setSelectedOrder(purchase)}
+                                       className="w-full py-2.5 bg-white text-black font-bold rounded-lg text-xs hover:bg-neutral-200 transition-colors flex items-center justify-center gap-2"
+                                   >
+                                       <Briefcase size={14} /> Manage Order
+                                   </button>
+                               ) : (
+                                   <button className="w-full py-2.5 bg-white/5 text-white font-bold rounded-lg text-xs border border-white/10 hover:bg-white/10 transition-colors flex items-center justify-center gap-2">
+                                       <Download size={14} /> Download Files
+                                   </button>
+                               )}
+                               <button 
+                                   onClick={() => setViewingReceipt(purchase)}
+                                   className="w-full py-2.5 text-neutral-500 font-bold rounded-lg text-xs hover:text-white transition-colors"
+                               >
+                                   View Receipt
+                               </button>
+                           </div>
+                       </div>
+                   ))}
+               </div>
+          </div>
+      );
   }
 
   // Default: Overview (The code from the original DashboardPage)
+  const currentChart = CHART_DATA[selectedStat] || CHART_DATA['revenue'];
   
   return (
     <div className="w-full max-w-[1600px] mx-auto pb-32 pt-6 px-6 lg:px-8 animate-in fade-in duration-500">
@@ -172,6 +304,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ view, projects, setProjec
               color="text-red-500"
               bgColor="bg-red-500/10"
               borderColor="border-red-500/20"
+              isActive={selectedStat === 'listeners'}
+              onClick={() => setSelectedStat('listeners')}
            />
            <StatCard 
               title="Total Revenue" 
@@ -182,6 +316,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ view, projects, setProjec
               color="text-emerald-400"
               bgColor="bg-emerald-400/10"
               borderColor="border-emerald-400/20"
+              isActive={selectedStat === 'revenue'}
+              onClick={() => setSelectedStat('revenue')}
            />
            <StatCard 
               title="Total Plays" 
@@ -192,6 +328,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ view, projects, setProjec
               color="text-blue-400"
               bgColor="bg-blue-400/10"
               borderColor="border-blue-400/20"
+              isActive={selectedStat === 'plays'}
+              onClick={() => setSelectedStat('plays')}
            />
            <StatCard 
               title="Active Orders" 
@@ -202,6 +340,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ view, projects, setProjec
               color="text-orange-400"
               bgColor="bg-orange-400/10"
               borderColor="border-orange-400/20"
+              isActive={selectedStat === 'orders'}
+              onClick={() => setSelectedStat('orders')}
            />
            <StatCard 
               title="Gems Balance" 
@@ -211,34 +351,36 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ view, projects, setProjec
               color="text-purple-400"
               bgColor="bg-purple-400/10"
               borderColor="border-purple-400/20"
+              isActive={selectedStat === 'gems'}
+              onClick={() => setSelectedStat('gems')}
            />
        </div>
 
        {/* Main Content Grid */}
        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
            
-           {/* Chart Section (Placeholder for now using CSS bars) */}
-           <div className="lg:col-span-2 bg-[#0a0a0a] border border-neutral-800 rounded-xl p-6 min-h-[300px] flex flex-col relative overflow-hidden">
+           {/* Chart Section */}
+           <div className="lg:col-span-2 bg-[#0a0a0a] border border-neutral-800 rounded-xl p-6 min-h-[300px] flex flex-col relative overflow-hidden transition-all duration-500">
                 <div className="flex justify-between items-center mb-6 z-10">
                     <div>
-                        <h3 className="text-sm font-bold text-white">Revenue Analytics</h3>
-                        <p className="text-[10px] text-neutral-500 font-mono">Income over time</p>
+                        <h3 className="text-sm font-bold text-white transition-all">{currentChart.label}</h3>
+                        <p className="text-[10px] text-neutral-500 font-mono">Performance over time</p>
                     </div>
                     <button className="p-2 hover:bg-white/5 rounded-lg text-neutral-500 hover:text-white transition-colors">
                         <MoreHorizontal size={16} />
                     </button>
                 </div>
 
-                {/* CSS Bar Chart Placeholder */}
-                <div className="flex-1 flex items-end justify-between gap-2 mt-4 z-10 px-2">
-                    {[40, 65, 45, 80, 55, 70, 60, 90, 75, 85, 65, 95].map((h, i) => (
+                {/* Bar Chart */}
+                <div className="flex-1 flex items-end justify-between gap-2 mt-4 z-10 px-2 h-[200px]">
+                    {currentChart.data.map((h, i) => (
                         <div key={i} className="w-full bg-neutral-800/50 rounded-t-sm hover:bg-primary/50 transition-colors relative group h-full flex items-end">
                             <div 
                                 style={{ height: `${h}%` }} 
-                                className="w-full bg-neutral-800 group-hover:bg-primary transition-all duration-500 rounded-t-sm"
+                                className="w-full bg-neutral-800 group-hover:bg-primary transition-all duration-500 rounded-t-sm ease-out"
                             ></div>
-                            <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-neutral-900 text-white text-[9px] py-1 px-2 rounded border border-neutral-800 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                                ${h * 100}
+                            <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-neutral-900 text-white text-[9px] py-1 px-2 rounded border border-neutral-800 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-20">
+                                {currentChart.unit}{currentChart.unit === '$' ? (h * 100) : (h * 10)}
                             </div>
                         </div>
                     ))}
@@ -366,11 +508,14 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ view, projects, setProjec
   );
 }
 
-const StatCard = ({ title, value, icon, trend, positive, live, subtext, color, bgColor, borderColor }: any) => (
-    <div className={`
-        bg-[#0a0a0a] border rounded-xl p-5 transition-all duration-300 hover:shadow-lg group relative overflow-hidden
-        ${borderColor ? borderColor : 'border-neutral-800'}
-    `}>
+const StatCard = ({ title, value, icon, trend, positive, live, subtext, color, bgColor, borderColor, isActive, onClick }: any) => (
+    <div 
+        onClick={onClick}
+        className={`
+            bg-[#0a0a0a] border rounded-xl p-5 transition-all duration-300 hover:shadow-lg group relative overflow-hidden cursor-pointer
+            ${isActive ? 'border-primary ring-1 ring-primary/50' : 'border-neutral-800 hover:border-white/20'}
+        `}
+    >
         <div className={`absolute top-0 right-0 p-20 rounded-full blur-3xl opacity-5 transition-opacity group-hover:opacity-10 ${color ? color.replace('text-', 'bg-') : 'bg-white'}`}></div>
         
         <div className="relative z-10">
@@ -436,6 +581,202 @@ const QuickActionTile = ({ icon, label }: any) => (
         </div>
         <span className="text-[10px] font-bold text-neutral-300 group-hover:text-white uppercase tracking-wider">{label}</span>
     </button>
+);
+
+// --- HELPER COMPONENTS FOR ORDERS VIEW ---
+
+const TabButton = ({ active, onClick, label }: any) => (
+    <button 
+        onClick={onClick}
+        className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${active ? 'bg-neutral-800 text-white shadow' : 'text-neutral-500 hover:text-neutral-300'}`}
+    >
+        {label}
+    </button>
+);
+
+const CustomerOrderDetail = ({ purchase, onBack }: { purchase: Purchase, onBack: () => void }) => {
+    // Mock Timeline
+    const timeline = [
+        { title: 'Order Placed', date: purchase.date, status: 'completed' },
+        { title: 'Requirements Submitted', date: purchase.date, status: 'completed' },
+        { title: 'Order in Progress', date: 'In Progress', status: purchase.status === 'Completed' ? 'completed' : 'active' },
+        { title: 'Delivery', date: purchase.status === 'Completed' ? 'Delivered' : 'Pending', status: purchase.status === 'Completed' ? 'completed' : 'pending' }
+    ];
+
+    return (
+        <div className="w-full max-w-[1600px] mx-auto pb-32 pt-6 px-6 lg:px-8 animate-in fade-in duration-500">
+             {/* Top Navigation */}
+             <button onClick={onBack} className="flex items-center gap-2 text-neutral-500 hover:text-white mb-6 text-xs font-bold">
+                 <ArrowLeft size={14} /> Back to Purchases
+             </button>
+
+             <div className="flex flex-col lg:flex-row gap-8">
+                 {/* Main Content */}
+                 <div className="flex-1 space-y-6">
+                     {/* Header Card */}
+                     <div className="bg-[#0a0a0a] border border-neutral-800 rounded-xl p-6 relative overflow-hidden">
+                         <div className="absolute top-0 right-0 p-20 bg-blue-500/5 rounded-full blur-3xl"></div>
+                         <div className="relative z-10 flex justify-between items-start">
+                             <div className="flex gap-4">
+                                 <div className="w-16 h-16 rounded-lg overflow-hidden border border-white/10">
+                                     <img src={purchase.image} className="w-full h-full object-cover" />
+                                 </div>
+                                 <div>
+                                     <h1 className="text-xl font-black text-white mb-1">{purchase.item}</h1>
+                                     <p className="text-sm text-neutral-400">Order #{purchase.id} • Sold by {purchase.seller}</p>
+                                 </div>
+                             </div>
+                             <div className={`px-3 py-1 rounded border text-xs font-bold uppercase ${purchase.status === 'Completed' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-blue-500/10 text-blue-500 border-blue-500/20'}`}>
+                                 {purchase.status}
+                             </div>
+                         </div>
+                     </div>
+
+                     {/* Timeline & Requirements */}
+                     <div className="bg-[#0a0a0a] border border-neutral-800 rounded-xl p-6">
+                         <h3 className="text-sm font-bold text-white mb-6 uppercase tracking-wider">Order Status</h3>
+                         <div className="relative pl-4 border-l border-neutral-800 space-y-8">
+                             {timeline.map((step, idx) => (
+                                 <div key={idx} className="relative pl-6">
+                                     <div className={`absolute -left-[21px] top-0 w-3 h-3 rounded-full border-2 ${step.status === 'completed' ? 'bg-green-500 border-green-500' : step.status === 'active' ? 'bg-blue-500 border-blue-500 animate-pulse' : 'bg-neutral-900 border-neutral-700'}`}></div>
+                                     <div className="text-sm font-bold text-white">{step.title}</div>
+                                     <div className="text-xs text-neutral-500">{step.date}</div>
+                                 </div>
+                             ))}
+                         </div>
+                     </div>
+
+                     {/* Delivery Files (If Completed) */}
+                     {purchase.status === 'Completed' && (
+                         <div className="bg-[#0a0a0a] border border-neutral-800 rounded-xl p-6">
+                             <h3 className="text-sm font-bold text-white mb-4 uppercase tracking-wider flex items-center gap-2">
+                                 <Package size={16} className="text-primary" /> Delivered Files
+                             </h3>
+                             <div className="space-y-2">
+                                 <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/5">
+                                     <div className="flex items-center gap-3">
+                                         <div className="p-2 bg-neutral-900 rounded text-white"><Music size={16} /></div>
+                                         <div>
+                                             <div className="text-sm font-bold text-white">Mixed_Master_Final.wav</div>
+                                             <div className="text-[10px] text-neutral-500">45 MB</div>
+                                         </div>
+                                     </div>
+                                     <button className="px-3 py-1.5 bg-white text-black text-xs font-bold rounded hover:bg-neutral-200 flex items-center gap-2">
+                                         <Download size={12} /> Download
+                                     </button>
+                                 </div>
+                             </div>
+                         </div>
+                     )}
+                 </div>
+
+                 {/* Sidebar Chat */}
+                 <div className="w-full lg:w-96 bg-[#0a0a0a] border border-neutral-800 rounded-xl flex flex-col h-[600px]">
+                     <div className="p-4 border-b border-neutral-800 bg-neutral-900/30">
+                         <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                             <MessageSquare size={16} /> Chat with {purchase.seller}
+                         </h3>
+                     </div>
+                     <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-dot-grid">
+                         <div className="flex justify-center"><span className="text-[10px] text-neutral-500 bg-neutral-900 px-2 py-1 rounded">Order Started {purchase.date}</span></div>
+                         <div className="flex gap-3">
+                             <div className="w-8 h-8 rounded-full bg-neutral-800 flex items-center justify-center text-xs font-bold text-white shrink-0">{purchase.seller[0]}</div>
+                             <div className="bg-neutral-800 p-3 rounded-xl rounded-tl-none text-sm text-neutral-300">
+                                 Thanks for your order! Please submit your requirements and files so I can get started.
+                             </div>
+                         </div>
+                         <div className="flex gap-3 flex-row-reverse">
+                             <div className="bg-primary p-3 rounded-xl rounded-tr-none text-sm text-black">
+                                 Just uploaded the vocal stems. Let me know if you need anything else!
+                             </div>
+                         </div>
+                     </div>
+                     <div className="p-4 border-t border-neutral-800 bg-neutral-900/30">
+                         <div className="flex gap-2">
+                             <button className="p-2 text-neutral-500 hover:text-white hover:bg-white/5 rounded"><Paperclip size={18} /></button>
+                             <input className="flex-1 bg-transparent text-sm text-white placeholder-neutral-600 focus:outline-none" placeholder="Type a message..." />
+                             <button className="p-2 text-primary hover:bg-primary/10 rounded"><Send size={18} /></button>
+                         </div>
+                     </div>
+                 </div>
+             </div>
+        </div>
+    );
+}
+
+const ReceiptModal = ({ purchase, onClose }: { purchase: Purchase, onClose: () => void }) => (
+  <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={onClose}>
+      <div className="w-full max-w-md bg-[#111] text-white border border-neutral-800 rounded-xl shadow-2xl overflow-hidden relative flex flex-col" onClick={e => e.stopPropagation()}>
+          
+          {/* Receipt Header */}
+          <div className="p-6 border-b border-white/10 text-center bg-white/5 relative">
+              <button onClick={onClose} className="absolute top-4 right-4 text-neutral-500 hover:text-white transition-colors">
+                  <X size={20} />
+              </button>
+              <div className="w-10 h-10 bg-primary text-black rounded-lg flex items-center justify-center mx-auto mb-3 shadow-[0_0_15px_rgba(var(--primary),0.4)]">
+                  <Terminal size={20} />
+              </div>
+              <h2 className="text-xl font-black tracking-tight mb-1">PAYMENT RECEIPT</h2>
+              <p className="text-[10px] text-neutral-400 font-mono uppercase tracking-widest">MusicAccess Terminal</p>
+          </div>
+
+          <div className="p-8 space-y-8 bg-dot-grid relative">
+              {/* Details */}
+              <div className="flex justify-between items-start">
+                  <div className="text-left">
+                      <p className="text-[10px] font-bold text-neutral-500 uppercase mb-1">Billed To</p>
+                      <p className="text-sm font-bold text-white">Mani Raé</p>
+                      <p className="text-xs text-neutral-400">producer@musicaccess.com</p>
+                  </div>
+                  <div className="text-right">
+                       <p className="text-[10px] font-bold text-neutral-500 uppercase mb-1">Receipt ID</p>
+                       <p className="text-sm font-mono text-primary">{purchase.id.replace('PUR-', 'RCPT-')}</p>
+                  </div>
+              </div>
+
+              {/* Line Item */}
+              <div className="py-4 border-t border-b border-dashed border-white/10 space-y-3">
+                  <div className="flex justify-between items-start">
+                       <div className="flex-1 pr-4">
+                           <p className="text-sm font-bold text-white">{purchase.item}</p>
+                           <p className="text-[10px] text-neutral-500 mt-0.5 uppercase">{purchase.type} • {purchase.seller}</p>
+                       </div>
+                       <p className="font-mono font-bold text-white">${purchase.amount.toFixed(2)}</p>
+                  </div>
+                  {/* Tax */}
+                   <div className="flex justify-between items-center text-xs text-neutral-500">
+                       <span>Processing Fee (0%)</span>
+                       <span>$0.00</span>
+                  </div>
+              </div>
+
+              {/* Total */}
+              <div className="flex justify-between items-end">
+                   <div>
+                       <p className="text-[10px] font-bold text-neutral-500 uppercase mb-1">Date Paid</p>
+                       <p className="text-xs font-medium text-neutral-300 flex items-center gap-1.5">
+                            <Calendar size={12} /> {purchase.date}
+                       </p>
+                   </div>
+                   <div className="text-right">
+                       <p className="text-[10px] font-bold text-neutral-500 uppercase mb-1">Total Paid</p>
+                       <p className="text-3xl font-black tracking-tighter text-white">${purchase.amount.toFixed(2)}</p>
+                   </div>
+              </div>
+          </div>
+
+          {/* Footer */}
+          <div className="p-4 bg-white/5 border-t border-white/10 flex justify-between items-center">
+              <div className="flex items-center gap-2 text-neutral-400">
+                   <div className="w-2 h-2 bg-green-500 rounded-full shadow-[0_0_5px_rgba(34,197,94,0.5)]"></div>
+                   <span className="text-[10px] font-bold uppercase">Payment Successful</span>
+              </div>
+              <button className="px-3 py-1.5 bg-white text-black text-[10px] font-bold rounded hover:bg-neutral-200 flex items-center gap-1.5 transition-colors">
+                  <Download size={12} /> DOWNLOAD PDF
+              </button>
+          </div>
+      </div>
+  </div>
 );
 
 export default DashboardPage;

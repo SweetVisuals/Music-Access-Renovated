@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { SlidersHorizontal, ChevronDown, Activity } from 'lucide-react';
 import { GENRES, KEYS } from '../constants';
@@ -22,10 +23,6 @@ const FilterBar: React.FC<FilterBarProps> = ({ filters, onFilterChange }) => {
     <div className="flex flex-col space-y-6 pb-6">
       <div className="flex items-end justify-between">
         <div>
-            <div className="flex items-center space-x-2 mb-1">
-                <Activity size={16} className="text-primary" />
-                <span className="text-xs font-mono text-primary tracking-wider uppercase">System Status: Online</span>
-            </div>
             <h2 className="text-3xl font-bold text-white tracking-tight">Marketplace</h2>
         </div>
         

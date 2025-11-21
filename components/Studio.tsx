@@ -1,354 +1,922 @@
 
-import React, { useState } from 'react';
-import { Project } from '../types';
+
+import React, { useState, useRef, useEffect } from 'react';
+import { Project, Track, Contract } from '../types';
 import { 
     Plus, 
     Search, 
     Music, 
-    HardDrive, 
     Box, 
-    LayoutGrid, 
     MoreVertical,
     Edit,
-    FileAudio,
     Download,
     Trash2,
-    Save,
     ArrowLeft,
     Play,
     Pause,
     Folder,
-    Settings
+    CheckCircle,
+    FileText,
+    Mic2,
+    Disc,
+    X,
+    Upload,
+    ChevronRight,
+    ShieldCheck,
+    StickyNote,
+    Check,
+    Calendar,
+    Filter,
+    Eye,
+    Briefcase
 } from 'lucide-react';
+import { MOCK_CONTRACTS, MOCK_NOTES } from '../constants';
 
 interface StudioProps {
     projects: Project[];
     setProjects: React.Dispatch<React.SetStateAction<Project[]>>;
+    currentTrackId: string | null;
+    isPlaying: boolean;
+    onPlayTrack: (project: Project, trackId: string) => void;
+    onTogglePlay: () => void;
 }
 
-const Studio: React.FC<StudioProps> = ({ projects, setProjects }) => {
-    const [activeTab, setActiveTab] = useState<'projects' | 'soundpacks' | 'files' | 'services'>('projects');
-    const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-    const [searchQuery, setSearchQuery] = useState('');
+// Extended Type for Studio Workflow
+interface StudioTrack extends Omit<Track, 'files'> {
+    noteId?: string;
+    statusTags: { label: string; active: boolean }[];
+    files?: {
+        main?: string; // ID of the main audio file
+    };
+}
 
-    // Project Editor State
-    const [editingNotes, setEditingNotes] = useState('');
-    const [activeLibraryTab, setActiveLibraryTab] = useState<'uploads' | 'purchased'>('uploads');
+interface StudioProject extends Omit<Project, 'status' | 'tracks'> {
+    releaseDate?: string;
+    status: 'Planning' | 'In Progress' | 'Mixing' | 'Mastering' | 'Ready';
+    progress: number;
+    format: 'Album' | 'EP' | 'Single';
+    tasks: { id: string; text: string; completed: boolean }[];
+    tracks: StudioTrack[];
+}
 
-    // Mock Purchased Files
-    const PURCHASED_FILES = [
-        { id: 'pf1', name: 'Spinz_808.wav', size: '2.4 MB', type: 'WAV' },
-        { id: 'pf2', name: 'Snare_Chop.wav', size: '1.1 MB', type: 'WAV' },
-        { id: 'pf3', name: 'Vox_Chant.wav', size: '4.5 MB', type: 'WAV' },
-        { id: 'pf4', name: 'Kick_Hard.wav', size: '0.8 MB', type: 'WAV' },
-    ];
+interface LibraryAsset {
+    id: string;
+    name: string;
+    type: 'Purchased' | 'Pack' | 'Commission' | 'Upload' | 'Project';
+    producer: string;
+    date: string;
+    fileType?: 'mp3' | 'wav' | 'zip';
+}
 
-    const MY_FILES = [
-        { id: 'mf1', name: 'My_Melody_Loop.wav', size: '12.4 MB', type: 'WAV' },
-        { id: 'mf2', name: 'Rough_Idea_1.mp3', size: '3.1 MB', type: 'MP3' },
-    ];
+// Mock Data for Purchased Library
+const LIBRARY_ASSETS: LibraryAsset[] = [
+    { id: 'lib1', name: 'Midnight_Tokio_Beat.wav', type: 'Purchased', producer: 'WavGod', date: 'Oct 24', fileType: 'wav' },
+    { id: 'lib2', name: 'Soul_Sample_Pack_Vol1.zip', type: 'Pack', producer: 'Mani Raé', date: 'Oct 22', fileType: 'zip' },
+    { id: 'lib3', name: 'Custom_Beat_Commission.mp3', type: 'Commission', producer: 'BeatSmith', date: 'Oct 15', fileType: 'mp3' },
+    { id: 'lib4', name: 'My_Vocal_Demo_v3.wav', type: 'Upload', producer: 'Me', date: 'Today', fileType: 'wav' },
+    { id: 'lib5', name: 'Drill_Anthem_Stems.zip', type: 'Purchased', producer: 'DrillMaster', date: 'Sep 30', fileType: 'zip' },
+    { id: 'lib6', name: 'Guitar_Loop_140bpm.wav', type: 'Upload', producer: 'Me', date: 'Yesterday', fileType: 'wav' },
+    { id: 'lib7', name: 'Neon_Rain_Project_File', type: 'Project', producer: 'WavGod', date: 'Oct 24', fileType: 'zip' },
+];
 
-    const handleOpenProject = (project: Project) => {
-        setSelectedProject(project);
-        setEditingNotes(project.notes || '');
+const Studio: React.FC<StudioProps> = ({ 
+    projects, 
+    setProjects,
+    currentTrackId,
+    isPlaying,
+    onPlayTrack,
+    onTogglePlay
+}) => {
+    const [activeView, setActiveView] = useState<'dashboard' | 'workspace'>('dashboard');
+    const [selectedProject, setSelectedProject] = useState<StudioProject | null>(null);
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    
+    // --- CREATE MODAL STATE ---
+    const [newProjectTitle, setNewProjectTitle] = useState('');
+    const [newProjectFormat, setNewProjectFormat] = useState<'Album' | 'EP' | 'Single'>('Album');
+
+    // --- MOCK STUDIO PROJECTS ---
+    const [studioProjects, setStudioProjects] = useState<StudioProject[]>([
+        {
+            ...projects[0],
+            title: 'Neon Horizons',
+            releaseDate: '2025-12-15',
+            status: 'In Progress',
+            progress: 45,
+            format: 'Album',
+            tasks: [
+                { id: 'tk1', text: 'Finalize tracklist', completed: true },
+                { id: 'tk2', text: 'Purchase licenses for Track 4', completed: false },
+                { id: 'tk3', text: 'Record vocals for Intro', completed: false }
+            ],
+            tracks: [
+                { 
+                    id: 't1', 
+                    title: 'Intro (Neon)', 
+                    duration: 120, 
+                    files: { main: 'lib1' },
+                    statusTags: [{ label: 'Lyrics', active: true }, { label: 'Vocals', active: false }, { label: 'Mixed', active: false }],
+                    noteId: 'n1'
+                },
+                { 
+                    id: 't2', 
+                    title: 'Night Drive', 
+                    duration: 180,
+                    statusTags: [{ label: 'Lyrics', active: false }, { label: 'Vocals', active: false }, { label: 'Mixed', active: false }] 
+                },
+                { 
+                    id: 't3', 
+                    title: 'Cyber Heart', 
+                    duration: 210,
+                    statusTags: [{ label: 'Lyrics', active: true }, { label: 'Vocals', active: true }, { label: 'Mixed', active: false }]
+                }
+            ]
+        } as StudioProject
+    ]);
+
+    const handleCreateProject = () => {
+        const newProj: StudioProject = {
+            id: `sp_${Date.now()}`,
+            title: newProjectTitle || 'Untitled Project',
+            producer: 'Me', 
+            price: 0, 
+            bpm: 0, 
+            key: '-', 
+            genre: 'Unsorted', 
+            type: 'beat_tape', 
+            tags: [], 
+            tracks: [],
+            releaseDate: 'TBD',
+            status: 'Planning',
+            progress: 0,
+            format: newProjectFormat,
+            tasks: [
+                { id: 'tk_init_1', text: 'Upload demos', completed: false },
+                { id: 'tk_init_2', text: 'Select beats', completed: false }
+            ]
+        };
+        
+        setStudioProjects([newProj, ...studioProjects]);
+        setIsCreateModalOpen(false);
+        setNewProjectTitle('');
+        openProject(newProj);
     };
 
-    const handleSaveNotes = () => {
-        if (selectedProject) {
-            const updatedProjects = projects.map(p => 
-                p.id === selectedProject.id ? { ...p, notes: editingNotes } : p
-            );
-            setProjects(updatedProjects);
-            // Update locally for immediate feedback if needed, though setProjects triggers re-render
+    const openProject = (p: StudioProject) => {
+        setSelectedProject(p);
+        setActiveView('workspace');
+    };
+
+    const deleteProject = (e: React.MouseEvent, id: string) => {
+        e.stopPropagation();
+        if (window.confirm('Are you sure you want to delete this project?')) {
+            setStudioProjects(prev => prev.filter(p => p.id !== id));
         }
     };
 
-    const handleAddFileToProject = (file: any) => {
-        // In a real app, this would add a file reference to the project
-        alert(`Added ${file.name} to project ${selectedProject?.title}`);
-    };
-
-    if (selectedProject) {
-        return (
-            <div className="h-full flex flex-col bg-[#0a0a0a]">
-                {/* Workbench Header */}
-                <div className="h-16 border-b border-white/5 flex items-center justify-between px-6 bg-[#050505]">
-                    <div className="flex items-center gap-4">
-                        <button 
-                            onClick={() => setSelectedProject(null)}
-                            className="p-2 hover:bg-white/5 rounded-lg text-neutral-400 hover:text-white transition-colors"
-                        >
-                            <ArrowLeft size={18} />
-                        </button>
-                        <div>
-                            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                                {selectedProject.title}
-                                <span className="text-[10px] px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-mono">EDITING</span>
-                            </h2>
-                            <div className="flex items-center gap-3 text-[10px] text-neutral-500 font-mono">
-                                <span>{selectedProject.bpm} BPM</span>
-                                <span>{selectedProject.key}</span>
-                                <span>{selectedProject.genre}</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                        <button 
-                            onClick={handleSaveNotes}
-                            className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-primary hover:text-black border border-white/10 rounded-lg text-xs font-bold text-white transition-all"
-                        >
-                            <Save size={14} />
-                            <span>Save Changes</span>
-                        </button>
-                    </div>
-                </div>
-
-                {/* Workbench Layout */}
-                <div className="flex-1 flex overflow-hidden">
-                    {/* Left Panel - Tracks */}
-                    <div className="flex-1 border-r border-white/5 flex flex-col">
-                         <div className="p-4 border-b border-white/5 flex justify-between items-center bg-neutral-900/30">
-                             <h3 className="text-xs font-bold text-white uppercase tracking-wider">Tracks & Stems</h3>
-                             <button className="p-1.5 hover:bg-white/5 rounded text-neutral-400 hover:text-white">
-                                 <Plus size={14} />
-                             </button>
-                         </div>
-                         <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                             {selectedProject.tracks.map((track, i) => (
-                                 <div key={track.id} className="flex items-center gap-3 p-3 rounded-lg bg-white/5 border border-white/5 hover:border-white/10 group">
-                                     <div className="w-6 h-6 flex items-center justify-center rounded bg-black/50 text-neutral-500 text-xs font-mono">
-                                         {i + 1}
-                                     </div>
-                                     <div className="flex-1 min-w-0">
-                                         <div className="text-xs font-bold text-white truncate">{track.title}</div>
-                                         <div className="text-[10px] text-neutral-500 font-mono">WAV • 24bit • 44.1kHz</div>
-                                     </div>
-                                     <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                         <button className="p-1.5 hover:bg-white/10 rounded text-neutral-400 hover:text-white"><Play size={12} /></button>
-                                         <button className="p-1.5 hover:bg-white/10 rounded text-neutral-400 hover:text-white"><Settings size={12} /></button>
-                                         <button className="p-1.5 hover:bg-red-500/20 rounded text-neutral-400 hover:text-red-500"><Trash2 size={12} /></button>
-                                     </div>
-                                 </div>
-                             ))}
-                             
-                             <div className="border-2 border-dashed border-white/5 rounded-lg p-8 flex flex-col items-center justify-center text-neutral-500 gap-2 hover:border-primary/30 hover:bg-primary/5 transition-all cursor-pointer">
-                                 <FileAudio size={24} />
-                                 <span className="text-xs font-mono">Drop stems here</span>
-                             </div>
-                         </div>
-                    </div>
-
-                    {/* Right Panel - Notes & Assets */}
-                    <div className="w-96 flex flex-col bg-[#080808]">
-                        {/* Notes Section */}
-                        <div className="h-1/2 flex flex-col border-b border-white/5">
-                             <div className="p-4 border-b border-white/5 bg-neutral-900/30">
-                                 <h3 className="text-xs font-bold text-white uppercase tracking-wider">Project Notes</h3>
-                             </div>
-                             <textarea 
-                                className="flex-1 bg-transparent p-4 text-sm text-neutral-300 focus:outline-none font-mono resize-none placeholder-neutral-700"
-                                placeholder="// Add session notes, lyrics, or ideas here..."
-                                value={editingNotes}
-                                onChange={(e) => setEditingNotes(e.target.value)}
-                             />
-                        </div>
-
-                        {/* Asset Browser */}
-                        <div className="flex-1 flex flex-col">
-                            <div className="flex items-center border-b border-white/5 bg-neutral-900/30">
-                                <button 
-                                    onClick={() => setActiveLibraryTab('uploads')}
-                                    className={`flex-1 py-3 text-[10px] font-bold uppercase tracking-wider border-b-2 ${activeLibraryTab === 'uploads' ? 'border-primary text-white' : 'border-transparent text-neutral-500'}`}
-                                >
-                                    My Uploads
-                                </button>
-                                <button 
-                                    onClick={() => setActiveLibraryTab('purchased')}
-                                    className={`flex-1 py-3 text-[10px] font-bold uppercase tracking-wider border-b-2 ${activeLibraryTab === 'purchased' ? 'border-primary text-white' : 'border-transparent text-neutral-500'}`}
-                                >
-                                    Purchased
-                                </button>
-                            </div>
-                            
-                            <div className="flex-1 overflow-y-auto p-2">
-                                {(activeLibraryTab === 'uploads' ? MY_FILES : PURCHASED_FILES).map(file => (
-                                    <div key={file.id} className="group flex items-center justify-between p-2 hover:bg-white/5 rounded mb-1 cursor-grab active:cursor-grabbing">
-                                        <div className="flex items-center gap-2 overflow-hidden">
-                                            <Music size={14} className="text-neutral-500 shrink-0" />
-                                            <div className="truncate">
-                                                <div className="text-xs text-neutral-300 truncate">{file.name}</div>
-                                                <div className="text-[9px] text-neutral-600 font-mono">{file.size} • {file.type}</div>
-                                            </div>
-                                        </div>
-                                        <button 
-                                            onClick={() => handleAddFileToProject(file)}
-                                            className="p-1.5 bg-white/10 hover:bg-primary hover:text-black rounded text-white opacity-0 group-hover:opacity-100 transition-all"
-                                            title="Add to Project"
-                                        >
-                                            <Plus size={12} />
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
     return (
-        <div className="w-full max-w-[1600px] mx-auto h-full flex flex-col animate-in fade-in duration-500">
-            {/* Main Studio Header */}
-            <div className="px-6 lg:px-8 py-6 flex items-end justify-between border-b border-white/5">
-                <div>
-                    <h1 className="text-3xl font-black text-white tracking-tight mb-1">My Studio</h1>
-                    <p className="text-neutral-500 text-sm">Manage your creative workspace.</p>
-                </div>
-                <div className="flex items-center gap-4">
-                    <div className="relative">
-                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
-                        <input 
-                            type="text" 
-                            placeholder="Search studio..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="bg-neutral-900 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-xs text-white focus:outline-none focus:border-neutral-700 w-64"
-                        />
-                    </div>
-                    <button className="flex items-center gap-2 px-4 py-2 bg-primary text-black rounded-lg text-xs font-bold hover:bg-primary/90 transition-colors shadow-[0_0_15px_rgb(var(--primary)/0.3)]">
-                        <Plus size={14} />
-                        <span>CREATE NEW</span>
-                    </button>
-                </div>
-            </div>
-
-            {/* Navigation Tabs */}
-            <div className="px-6 lg:px-8 border-b border-white/5 flex items-center gap-8">
-                <TabButton active={activeTab === 'projects'} onClick={() => setActiveTab('projects')} icon={<LayoutGrid size={16} />} label="Projects" count={projects.length} />
-                <TabButton active={activeTab === 'soundpacks'} onClick={() => setActiveTab('soundpacks')} icon={<Box size={16} />} label="Soundpacks" count={12} />
-                <TabButton active={activeTab === 'files'} onClick={() => setActiveTab('files')} icon={<HardDrive size={16} />} label="Files" />
-                <TabButton active={activeTab === 'services'} onClick={() => setActiveTab('services')} icon={<Settings size={16} />} label="Services" />
-            </div>
-
-            {/* Content Area */}
-            <div className="flex-1 p-6 lg:p-8 overflow-y-auto">
-                {activeTab === 'projects' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                        {/* Create New Card */}
-                        <button className="h-[280px] border border-dashed border-neutral-800 rounded-xl flex flex-col items-center justify-center text-neutral-500 hover:text-primary hover:border-primary/50 hover:bg-primary/5 transition-all group bg-white/[0.01]">
-                            <div className="h-16 w-16 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-lg">
-                                <Plus size={24} />
+        <div className="w-full h-full flex flex-col relative bg-[#050505]">
+            {/* NEW PROJECT MODAL */}
+            {isCreateModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="w-full max-w-md bg-[#0a0a0a] border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden">
+                        <div className="p-6 border-b border-white/5 flex justify-between items-center">
+                            <h3 className="text-lg font-bold text-white">New Release</h3>
+                            <button onClick={() => setIsCreateModalOpen(false)}><X size={20} className="text-neutral-500 hover:text-white"/></button>
+                        </div>
+                        <div className="p-6 space-y-6">
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-neutral-500 uppercase">Project Title</label>
+                                <input 
+                                    autoFocus
+                                    value={newProjectTitle}
+                                    onChange={(e) => setNewProjectTitle(e.target.value)}
+                                    placeholder="e.g. Summer Vibes Vol. 1"
+                                    className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-3 text-white focus:border-primary/50 focus:outline-none"
+                                />
                             </div>
-                            <span className="font-mono text-xs font-bold uppercase tracking-widest">New Project</span>
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-neutral-500 uppercase">Format</label>
+                                <div className="grid grid-cols-3 gap-3">
+                                    {(['Album', 'EP', 'Single'] as const).map(fmt => (
+                                        <button
+                                            key={fmt}
+                                            onClick={() => setNewProjectFormat(fmt)}
+                                            className={`py-3 rounded-lg text-xs font-bold border transition-all ${newProjectFormat === fmt ? 'bg-white text-black border-white' : 'bg-neutral-900 text-neutral-500 border-neutral-800 hover:border-neutral-600'}`}
+                                        >
+                                            {fmt}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-6 pt-0 flex justify-end">
+                             <button 
+                                onClick={handleCreateProject}
+                                disabled={!newProjectTitle.trim()}
+                                className="w-full py-3 bg-primary text-black font-bold rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                             >
+                                Create Workspace
+                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {activeView === 'dashboard' ? (
+                <div className="w-full max-w-[1600px] mx-auto pb-32 pt-6 px-6 lg:px-8 animate-in fade-in duration-500">
+                    <div className="flex items-end justify-between mb-8">
+                        <div>
+                            <h1 className="text-3xl font-black text-white tracking-tight mb-1">My Studio</h1>
+                            <p className="text-neutral-500 text-sm">Manage your releases, organize purchased beats, and track contracts.</p>
+                        </div>
+                        <button 
+                            onClick={() => setIsCreateModalOpen(true)}
+                            className="flex items-center gap-2 px-5 py-2.5 bg-primary text-black rounded-lg text-xs font-bold hover:bg-primary/90 transition-colors shadow-[0_0_15px_rgb(var(--primary)/0.3)]"
+                        >
+                            <Plus size={16} />
+                            <span>NEW PROJECT</span>
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        {/* Create New Card (Shortcut) */}
+                        <button 
+                            onClick={() => setIsCreateModalOpen(true)}
+                            className="h-[280px] border-2 border-dashed border-neutral-800 rounded-xl flex flex-col items-center justify-center text-neutral-500 hover:text-primary hover:border-primary/50 hover:bg-primary/5 transition-all group bg-white/[0.01]"
+                        >
+                            <div className="h-16 w-16 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-lg">
+                                <Plus size={28} />
+                            </div>
+                            <span className="font-mono text-xs font-bold uppercase tracking-widest">Start New Release</span>
                         </button>
 
-                        {/* Project Cards */}
-                        {projects.filter(p => p.title.toLowerCase().includes(searchQuery.toLowerCase())).map(project => (
-                            <div key={project.id} className="h-[280px] group bg-neutral-900/50 border border-white/5 rounded-xl overflow-hidden hover:border-white/20 hover:shadow-xl transition-all flex flex-col relative">
-                                {/* Status Stripe */}
-                                <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-primary to-transparent opacity-50"></div>
-                                
-                                <div className="p-5 flex-1 relative">
-                                    <div className="flex justify-between items-start mb-4">
-                                        <div className="px-2 py-1 bg-black/50 rounded text-[10px] font-mono text-neutral-400 border border-white/5">
-                                            {project.genre}
-                                        </div>
-                                        <button className="text-neutral-500 hover:text-white">
-                                            <MoreVertical size={14} />
-                                        </button>
-                                    </div>
+                        {/* Project Workspace Cards */}
+                        {studioProjects.map(project => (
+                            <div 
+                                key={project.id} 
+                                onClick={() => openProject(project)}
+                                className="group h-[280px] bg-[#0a0a0a] border border-neutral-800 rounded-xl overflow-hidden hover:border-neutral-600 transition-all relative cursor-pointer hover:shadow-2xl flex flex-col"
+                            >
+                                {/* Top Section: Cover & Info */}
+                                <div className="flex-1 relative p-5 flex flex-col justify-between z-10">
+                                    <div className="absolute inset-0 bg-gradient-to-b from-neutral-900 to-[#0a0a0a]"></div>
                                     
-                                    <h3 className="text-lg font-bold text-white mb-2 line-clamp-1">{project.title}</h3>
-                                    
-                                    <div className="space-y-2 mb-4">
-                                        <div className="flex justify-between text-[10px] font-mono text-neutral-500">
-                                            <span>BPM / Key</span>
-                                            <span className="text-neutral-300">{project.bpm} / {project.key}</span>
-                                        </div>
-                                        <div className="flex justify-between text-[10px] font-mono text-neutral-500">
-                                            <span>Tracks</span>
-                                            <span className="text-neutral-300">{project.tracks.length}</span>
-                                        </div>
-                                        <div className="flex justify-between text-[10px] font-mono text-neutral-500">
-                                            <span>Updated</span>
-                                            <span className="text-neutral-300">2h ago</span>
+                                    <div className="relative flex justify-between items-start">
+                                        <span className={`px-2 py-1 rounded text-[9px] font-bold uppercase tracking-wider border ${
+                                            project.status === 'Ready' ? 'bg-green-500/10 text-green-500 border-green-500/20' :
+                                            project.status === 'Planning' ? 'bg-neutral-800 text-neutral-400 border-neutral-700' :
+                                            'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                                        }`}>
+                                            {project.status}
+                                        </span>
+                                        <div 
+                                            onClick={(e) => e.stopPropagation()} 
+                                            className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                        >
+                                             {/* Simple Dropdown for More Actions */}
+                                             <div className="group/menu relative">
+                                                 <button className="text-neutral-500 hover:text-white"><MoreVertical size={16} /></button>
+                                                 <div className="absolute right-0 top-full mt-1 w-32 bg-neutral-900 border border-neutral-800 rounded-lg shadow-xl hidden group-hover/menu:block z-20">
+                                                     <button onClick={(e) => deleteProject(e, project.id)} className="w-full text-left px-3 py-2 text-xs text-red-400 hover:bg-white/5 rounded-t-lg">Delete</button>
+                                                     <button className="w-full text-left px-3 py-2 text-xs text-neutral-300 hover:bg-white/5 rounded-b-lg">Rename</button>
+                                                 </div>
+                                             </div>
                                         </div>
                                     </div>
 
-                                    {project.notes && (
-                                        <div className="mt-2 p-2 bg-yellow-500/5 border border-yellow-500/10 rounded">
-                                            <p className="text-[9px] text-yellow-500/80 line-clamp-2 font-mono">
-                                                // {project.notes}
-                                            </p>
+                                    <div className="relative">
+                                        <div className="flex items-center gap-2 mb-1 text-[10px] text-neutral-500 font-mono uppercase">
+                                            <Disc size={12} /> {project.format}
                                         </div>
-                                    )}
+                                        <h3 className="text-xl font-bold text-white truncate group-hover:text-primary transition-colors">{project.title}</h3>
+                                        <div className="flex items-center gap-2 text-xs text-neutral-400 mt-1">
+                                            <Calendar size={12} />
+                                            <span>Target: {project.releaseDate || 'TBD'}</span>
+                                        </div>
+                                    </div>
                                 </div>
 
-                                <div className="p-3 border-t border-white/5 bg-black/20 flex gap-2">
-                                    <button 
-                                        onClick={() => handleOpenProject(project)}
-                                        className="flex-1 py-2 bg-white/5 hover:bg-white/10 rounded text-xs font-bold text-white transition-colors flex items-center justify-center gap-2"
-                                    >
-                                        <Edit size={12} /> Edit
-                                    </button>
-                                    <button className="p-2 hover:bg-white/5 rounded text-neutral-400 hover:text-white">
-                                        <Download size={14} />
-                                    </button>
+                                {/* Bottom Section: Stats */}
+                                <div className="bg-neutral-900/30 border-t border-white/5 p-5 relative">
+                                     <div className="flex justify-between text-[10px] font-bold text-neutral-500 uppercase mb-2">
+                                         <span>Progress</span>
+                                         <span>{project.progress}%</span>
+                                     </div>
+                                     <div className="w-full h-1.5 bg-neutral-800 rounded-full overflow-hidden mb-3">
+                                         <div className="h-full bg-primary transition-all duration-500" style={{ width: `${project.progress}%` }}></div>
+                                     </div>
+                                     <div className="flex items-center gap-4 text-[10px] text-neutral-400">
+                                         <span className="flex items-center gap-1"><Music size={12}/> {project.tracks.length} Tracks</span>
+                                         <span className="flex items-center gap-1"><CheckCircle size={12}/> {project.tasks.filter(t => t.completed).length} Done</span>
+                                     </div>
                                 </div>
                             </div>
                         ))}
                     </div>
-                )}
+                </div>
+            ) : (
+                selectedProject && (
+                    <WorkspaceView 
+                        project={selectedProject} 
+                        onBack={() => setActiveView('dashboard')}
+                        onUpdate={(updated) => {
+                            setStudioProjects(prev => prev.map(p => p.id === updated.id ? updated : p));
+                            setSelectedProject(updated);
+                        }}
+                        isPlaying={isPlaying}
+                        currentTrackId={currentTrackId}
+                        onPlayTrack={onPlayTrack}
+                        onTogglePlay={onTogglePlay}
+                    />
+                )
+            )}
+        </div>
+    );
+};
 
-                {activeTab === 'files' && (
-                    <div className="border border-dashed border-neutral-800 rounded-xl p-12 text-center">
-                        <HardDrive size={48} className="mx-auto text-neutral-700 mb-4" />
-                        <h3 className="text-neutral-400 font-bold mb-2">File Management</h3>
-                        <p className="text-neutral-600 text-sm mb-6">Drag and drop files here to upload to your cloud storage.</p>
-                        <button className="px-6 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs font-bold text-white">
-                            Browse Files
+// --- WORKSPACE VIEW (The "Album Manager" Interface) ---
+
+interface WorkspaceViewProps {
+    project: StudioProject;
+    onBack: () => void;
+    onUpdate: (project: StudioProject) => void;
+    isPlaying: boolean;
+    currentTrackId: string | null;
+    onPlayTrack: (project: Project, trackId: string) => void;
+    onTogglePlay: () => void;
+}
+
+const WorkspaceView: React.FC<WorkspaceViewProps> = ({ 
+    project, 
+    onBack, 
+    onUpdate,
+    isPlaying,
+    currentTrackId,
+    onPlayTrack,
+    onTogglePlay
+}) => {
+    const [tab, setTab] = useState<'tracks' | 'files' | 'contracts' | 'overview'>('tracks');
+    const [draggingAsset, setDraggingAsset] = useState<LibraryAsset | null>(null);
+    
+    // Library State
+    const [libraryFilter, setLibraryFilter] = useState<'All' | 'Purchased' | 'Uploaded'>('All');
+    const [librarySearch, setLibrarySearch] = useState('');
+
+    // Modal States
+    const [activeContract, setActiveContract] = useState<Contract | null>(null);
+    const [attachNoteModalOpen, setAttachNoteModalOpen] = useState(false);
+    const [trackToAttachNote, setTrackToAttachNote] = useState<string | null>(null);
+    const [newTaskText, setNewTaskText] = useState('');
+
+    // Menu State
+    const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
+    useEffect(() => {
+        const handleClickOutside = () => setOpenMenuId(null);
+        document.addEventListener('click', handleClickOutside);
+        return () => document.removeEventListener('click', handleClickOutside);
+    }, []);
+
+    // -- ACTIONS --
+
+    const addTrack = () => {
+        const newTrack: StudioTrack = { 
+            id: `t_${Date.now()}`, 
+            title: 'Untitled Track', 
+            duration: 0,
+            statusTags: [{ label: 'Lyrics', active: false }, { label: 'Vocals', active: false }, { label: 'Mixed', active: false }],
+        };
+        onUpdate({
+            ...project,
+            tracks: [...project.tracks, newTrack]
+        });
+    };
+
+    const deleteTrack = (trackId: string) => {
+        if(window.confirm('Remove this track?')) {
+            onUpdate({ ...project, tracks: project.tracks.filter(t => t.id !== trackId) });
+        }
+    };
+
+    const toggleTask = (taskId: string) => {
+        const newTasks = project.tasks.map(t => t.id === taskId ? { ...t, completed: !t.completed } : t);
+        const progress = Math.round((newTasks.filter(t => t.completed).length / newTasks.length) * 100) || 0;
+        onUpdate({ ...project, tasks: newTasks, progress });
+    };
+
+    const addTask = () => {
+        if (!newTaskText.trim()) return;
+        const newTask = { id: `tk_${Date.now()}`, text: newTaskText, completed: false };
+        const newTasks = [...project.tasks, newTask];
+        const progress = Math.round((newTasks.filter(t => t.completed).length / newTasks.length) * 100) || 0;
+        onUpdate({ ...project, tasks: newTasks, progress });
+        setNewTaskText('');
+    };
+
+    const handleDropOnTrack = (trackId: string) => {
+        if (draggingAsset) {
+            const updatedTracks = project.tracks.map(t => {
+                if (t.id === trackId) {
+                    return { 
+                        ...t, 
+                        title: t.title === 'Untitled Track' ? draggingAsset.name.replace(/_/g, ' ').replace(/\.(mp3|wav|zip)$/, '') : t.title,
+                        files: { ...t.files, main: draggingAsset.id }
+                    };
+                }
+                return t;
+            });
+            onUpdate({ ...project, tracks: updatedTracks });
+            setDraggingAsset(null);
+        }
+    };
+
+    const toggleStatusTag = (trackId: string, tagLabel: string) => {
+        const updatedTracks = project.tracks.map(t => {
+            if (t.id === trackId) {
+                return {
+                    ...t,
+                    statusTags: t.statusTags.map(tag => tag.label === tagLabel ? { ...tag, active: !tag.active } : tag)
+                };
+            }
+            return t;
+        });
+        onUpdate({ ...project, tracks: updatedTracks });
+    };
+
+    // Notes Logic
+    const openAttachNoteModal = (trackId: string) => {
+        setTrackToAttachNote(trackId);
+        setAttachNoteModalOpen(true);
+        setOpenMenuId(null); // Close menu
+    };
+
+    const attachNoteToTrack = (noteId: string) => {
+        if (trackToAttachNote) {
+            const updatedTracks = project.tracks.map(t => t.id === trackToAttachNote ? { ...t, noteId } : t);
+            onUpdate({ ...project, tracks: updatedTracks });
+            setAttachNoteModalOpen(false);
+            setTrackToAttachNote(null);
+        }
+    };
+
+    const removeNoteFromTrack = (trackId: string) => {
+        const updatedTracks = project.tracks.map(t => {
+            if (t.id === trackId) {
+                const { noteId, ...rest } = t;
+                return rest;
+            }
+            return t;
+        });
+        onUpdate({ ...project, tracks: updatedTracks });
+    };
+
+    // Playback
+    const handleTrackClick = (trackId: string) => {
+        if (currentTrackId === trackId && isPlaying) {
+            onTogglePlay();
+        } else {
+            // We need to cast StudioProject to Project as it is largely compatible
+            // Note: StudioProject extends Project via Omit/Interface, but runtime object structure is what matters.
+            // Since StudioTrack files structure differs slightly, MusicPlayer might need adjustment if it relies on specific file paths.
+            // However, for UI demo purposes, as long as ID matches, it works.
+            onPlayTrack(project as unknown as Project, trackId);
+        }
+    };
+
+    // Library Filtering
+    const filteredLibrary = LIBRARY_ASSETS.filter(asset => {
+        const matchesFilter = libraryFilter === 'All' 
+            ? true 
+            : libraryFilter === 'Purchased' 
+                ? (asset.type === 'Purchased' || asset.type === 'Pack' || asset.type === 'Project') 
+                : asset.type === 'Upload';
+        
+        const matchesSearch = asset.name.toLowerCase().includes(librarySearch.toLowerCase());
+        return matchesFilter && matchesSearch;
+    });
+
+    return (
+        <div className="flex flex-col h-full bg-[#0a0a0a]">
+            
+            {/* ATTACH NOTE MODAL */}
+            {attachNoteModalOpen && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div className="w-full max-w-lg bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                        <div className="flex items-center justify-between p-4 border-b border-white/5">
+                            <h3 className="font-bold text-white flex items-center gap-2">
+                                <StickyNote size={16} className="text-yellow-500" /> 
+                                Select Note from Notebook
+                            </h3>
+                            <button onClick={() => setAttachNoteModalOpen(false)}><X size={18} className="text-neutral-500 hover:text-white" /></button>
+                        </div>
+                        <div className="p-4 max-h-[60vh] overflow-y-auto custom-scrollbar space-y-2">
+                            {MOCK_NOTES.map(note => (
+                                <div 
+                                    key={note.id}
+                                    onClick={() => attachNoteToTrack(note.id)}
+                                    className="p-3 rounded-lg border border-white/5 bg-white/5 hover:bg-white/10 hover:border-primary/30 cursor-pointer transition-all"
+                                >
+                                    <h4 className="text-sm font-bold text-white mb-1">{note.title}</h4>
+                                    <p className="text-xs text-neutral-400 line-clamp-2">{note.content}</p>
+                                    <div className="flex gap-2 mt-2">
+                                        {note.tags.map(tag => (
+                                            <span key={tag} className="text-[9px] bg-black px-2 py-0.5 rounded text-neutral-500 border border-neutral-800">{tag}</span>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="p-3 border-t border-white/5 bg-neutral-950 text-center text-[10px] text-neutral-500">
+                            Manage notes in the main Notes page
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* CONTRACT VIEWER MODAL */}
+            {activeContract && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div className="w-full max-w-2xl bg-white text-black rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in slide-in-from-bottom-4 duration-300">
+                         <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                             <div>
+                                 <h3 className="font-bold text-lg">{activeContract.title}</h3>
+                                 <p className="text-xs text-gray-500 uppercase tracking-wider">Status: {activeContract.status}</p>
+                             </div>
+                             <button onClick={() => setActiveContract(null)} className="p-2 hover:bg-gray-200 rounded-full"><X size={20} /></button>
+                         </div>
+                         <div className="flex-1 overflow-y-auto p-8 font-serif text-sm leading-relaxed">
+                             <h1 className="text-center text-xl font-bold mb-6 underline">AGREEMENT TERMS</h1>
+                             <p className="mb-4"><strong>Between:</strong> Producer (Me) AND Client ({activeContract.clientName || 'TBD'})</p>
+                             <p className="mb-4"><strong>Date:</strong> {activeContract.created}</p>
+                             <hr className="my-4 border-gray-300" />
+                             <p className="mb-4 whitespace-pre-wrap">{activeContract.terms}</p>
+                             
+                             <div className="mt-8 grid grid-cols-2 gap-8">
+                                 <div>
+                                     <p className="font-bold mb-2">Producer Signature:</p>
+                                     <div className="h-12 border-b border-black flex items-end font-signature text-2xl">
+                                         {activeContract.producerSignature || <span className="text-gray-300 text-xs font-sans">Not Signed</span>}
+                                     </div>
+                                 </div>
+                                 <div>
+                                     <p className="font-bold mb-2">Client Signature:</p>
+                                     <div className="h-12 border-b border-black flex items-end font-signature text-2xl">
+                                         {activeContract.clientSignature || <span className="text-gray-300 text-xs font-sans">Waiting...</span>}
+                                     </div>
+                                 </div>
+                             </div>
+                         </div>
+                         <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-2">
+                             <button className="px-4 py-2 text-xs font-bold text-gray-600 hover:text-black flex items-center gap-2"><Download size={14}/> Download PDF</button>
+                             <button onClick={() => setActiveContract(null)} className="px-4 py-2 bg-black text-white text-xs font-bold rounded">Close</button>
+                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* WORKSPACE HEADER */}
+            <div className="h-16 border-b border-white/5 bg-[#050505] flex items-center justify-between px-6 shrink-0">
+                <div className="flex items-center gap-4">
+                    <button onClick={onBack} className="p-2 hover:bg-white/5 rounded-lg text-neutral-400 hover:text-white transition-colors">
+                        <ArrowLeft size={18} />
+                    </button>
+                    <div className="h-8 w-px bg-neutral-800"></div>
+                    <div>
+                        <h2 className="text-lg font-bold text-white leading-none">{project.title}</h2>
+                        <div className="flex items-center gap-2 text-[10px] text-neutral-500 font-mono mt-1">
+                            <span className="uppercase">{project.format}</span>
+                            <span>•</span>
+                            <span>{project.tracks.length} Tracks</span>
+                            <span>•</span>
+                            <span className={project.status === 'Ready' ? 'text-green-500' : 'text-primary'}>{project.status}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex bg-neutral-900 p-1 rounded-lg border border-neutral-800">
+                    <TabBtn active={tab === 'overview'} onClick={() => setTab('overview')} label="Overview" />
+                    <TabBtn active={tab === 'tracks'} onClick={() => setTab('tracks')} label="Tracks & Beats" icon={<Music size={14} />} />
+                    <TabBtn active={tab === 'contracts'} onClick={() => setTab('contracts')} label="Contracts" icon={<FileText size={14} />} />
+                    <TabBtn active={tab === 'files'} onClick={() => setTab('files')} label="Files" icon={<Folder size={14} />} />
+                </div>
+
+                <div className="flex items-center gap-2">
+                    <button className="px-4 py-2 bg-white/5 border border-white/10 hover:bg-white/10 rounded-lg text-xs font-bold text-white transition-colors flex items-center gap-2">
+                        <Download size={14} /> Export
+                    </button>
+                </div>
+            </div>
+
+            {/* MAIN CONTENT AREA */}
+            <div className="flex-1 flex overflow-hidden">
+                
+                {/* LEFT CONTENT (Dynamic based on Tab) */}
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+                    
+                    {tab === 'overview' && (
+                        <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-2">
+                            <div className="bg-neutral-900/30 border border-white/5 rounded-xl p-6">
+                                <h3 className="text-sm font-bold text-white mb-4 uppercase tracking-wider flex justify-between items-center">
+                                    Release Checklist
+                                    <span className="text-[10px] text-neutral-500 normal-case">{project.tasks.filter(t => t.completed).length}/{project.tasks.length} Completed</span>
+                                </h3>
+                                <div className="space-y-3">
+                                    {project.tasks.map(task => (
+                                        <div key={task.id} className="flex items-center justify-between group">
+                                            <div 
+                                                className="flex items-center gap-3 p-3 rounded-lg bg-white/5 border border-white/5 hover:border-white/10 cursor-pointer flex-1" 
+                                                onClick={() => toggleTask(task.id)}
+                                            >
+                                                <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${task.completed ? 'bg-primary border-primary text-black' : 'border-neutral-600 text-transparent'}`}>
+                                                    <CheckCircle size={12} />
+                                                </div>
+                                                <span className={`text-sm ${task.completed ? 'text-neutral-500 line-through' : 'text-white'}`}>{task.text}</span>
+                                            </div>
+                                            <button onClick={() => {
+                                                const newTasks = project.tasks.filter(t => t.id !== task.id);
+                                                onUpdate({...project, tasks: newTasks});
+                                            }} className="p-2 text-neutral-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                    
+                                    {/* Add Task Input */}
+                                    <div className="flex items-center gap-2 p-2 mt-2">
+                                        <Plus size={14} className="text-neutral-500" />
+                                        <input 
+                                            className="bg-transparent border-none text-sm text-white focus:outline-none w-full placeholder-neutral-600"
+                                            placeholder="Add a new task..."
+                                            value={newTaskText}
+                                            onChange={(e) => setNewTaskText(e.target.value)}
+                                            onKeyDown={(e) => e.key === 'Enter' && addTask()}
+                                        />
+                                        <button onClick={addTask} disabled={!newTaskText} className="text-xs font-bold text-primary disabled:opacity-50">Add</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {tab === 'tracks' && (
+                        <div className="max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-2">
+                             <div className="flex justify-between items-end mb-4">
+                                 <h3 className="text-sm font-bold text-white uppercase tracking-wider">Tracklist</h3>
+                                 <button onClick={addTrack} className="text-xs font-bold text-primary hover:text-white flex items-center gap-1"><Plus size={14}/> Add Track</button>
+                             </div>
+                             
+                             <div className="space-y-2">
+                                 {project.tracks.map((track, idx) => {
+                                     const isTrackPlaying = isPlaying && currentTrackId === track.id;
+                                     return (
+                                     <div 
+                                        key={track.id} 
+                                        onClick={() => handleTrackClick(track.id)}
+                                        className={`
+                                            group bg-[#0f0f0f] border border-neutral-800 rounded-xl p-2 flex items-center gap-4 transition-colors cursor-pointer select-none
+                                            ${isTrackPlaying ? 'border-primary bg-primary/5' : 'hover:border-neutral-600 hover:bg-white/5'}
+                                        `}
+                                        onDragOver={(e) => e.preventDefault()}
+                                        onDrop={() => handleDropOnTrack(track.id)}
+                                     >
+                                         <div className="w-8 text-center text-neutral-600 font-mono text-sm flex justify-center">
+                                             {isTrackPlaying ? (
+                                                 <Pause size={14} className="text-primary fill-primary animate-pulse" />
+                                             ) : (
+                                                 <span className="group-hover:hidden">{idx + 1}</span>
+                                             )}
+                                             {!isTrackPlaying && <Play size={14} className="hidden group-hover:block text-neutral-400" />}
+                                         </div>
+                                         
+                                         {/* Track Info / Beat Source */}
+                                         <div className="flex-1">
+                                             <div className="flex items-center gap-2 mb-1" onClick={(e) => e.stopPropagation()}>
+                                                 <input 
+                                                    className="bg-transparent text-sm font-bold text-white focus:outline-none w-full cursor-text" 
+                                                    value={track.title}
+                                                    onChange={(e) => {
+                                                        const updated = project.tracks.map(t => t.id === track.id ? { ...t, title: e.target.value } : t);
+                                                        onUpdate({...project, tracks: updated});
+                                                    }}
+                                                 />
+                                             </div>
+                                             <div className="flex items-center gap-4 text-[10px]">
+                                                 {track.files?.main ? (
+                                                     <span className="flex items-center gap-1 text-green-500 bg-green-500/10 px-1.5 py-0.5 rounded border border-green-500/20">
+                                                         <Music size={10} /> {LIBRARY_ASSETS.find(a => a.id === track.files?.main)?.name || 'Beat Assigned'}
+                                                     </span>
+                                                 ) : (
+                                                     <span className="flex items-center gap-1 text-neutral-500 bg-neutral-800 px-1.5 py-0.5 rounded border border-neutral-700 border-dashed">
+                                                         <Upload size={10} /> Drag Beat Here
+                                                     </span>
+                                                 )}
+                                                 
+                                                 {track.noteId && (
+                                                     <span className="flex items-center gap-1 text-yellow-500">
+                                                         <StickyNote size={10} /> 
+                                                         {MOCK_NOTES.find(n => n.id === track.noteId)?.title || 'Note Attached'}
+                                                     </span>
+                                                 )}
+                                             </div>
+                                         </div>
+
+                                         {/* Status Pills */}
+                                         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                             {track.statusTags.map(tag => (
+                                                 <div 
+                                                    key={tag.label}
+                                                    onClick={() => toggleStatusTag(track.id, tag.label)}
+                                                    className={`px-2 py-1 rounded border flex items-center gap-1 text-[9px] font-bold uppercase cursor-pointer transition-all ${tag.active ? 'bg-green-500/10 border-green-500/20 text-green-500' : 'bg-neutral-900 border-neutral-800 text-neutral-600 hover:border-neutral-600'}`}
+                                                 >
+                                                     {tag.label === 'Vocals' ? <Mic2 size={10} /> : tag.label === 'Lyrics' ? <FileText size={10} /> : <CheckCircle size={10} />}
+                                                     {tag.label}
+                                                 </div>
+                                             ))}
+                                         </div>
+
+                                         {/* Actions */}
+                                         <div className="flex items-center gap-2 pr-2 border-l border-neutral-800 pl-4 relative">
+                                             <button onClick={(e) => e.stopPropagation()} className="p-1.5 hover:bg-white/10 rounded text-neutral-500 hover:text-white" title="Link Contract">
+                                                 <ShieldCheck size={14} />
+                                             </button>
+                                             
+                                             {/* Click-based Dropdown Menu */}
+                                             <div className="relative">
+                                                 <button 
+                                                    onClick={(e) => { 
+                                                        e.stopPropagation();
+                                                        setOpenMenuId(openMenuId === track.id ? null : track.id);
+                                                    }}
+                                                    className={`p-1.5 rounded transition-colors ${openMenuId === track.id ? 'bg-white/10 text-white' : 'text-neutral-500 hover:text-white hover:bg-white/10'}`}
+                                                 >
+                                                     <MoreVertical size={14} />
+                                                 </button>
+                                                 
+                                                 {openMenuId === track.id && (
+                                                     <div className="absolute right-0 top-full mt-1 w-40 bg-[#0a0a0a] border border-neutral-800 rounded-lg shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+                                                         <button onClick={(e) => { e.stopPropagation(); openAttachNoteModal(track.id); }} className="w-full text-left px-3 py-2 text-xs text-neutral-300 hover:bg-white/5 hover:text-white flex items-center gap-2">
+                                                             <StickyNote size={12} /> Attach Note
+                                                         </button>
+                                                         {track.noteId && (
+                                                             <button onClick={(e) => { e.stopPropagation(); removeNoteFromTrack(track.id); setOpenMenuId(null); }} className="w-full text-left px-3 py-2 text-xs text-red-400 hover:bg-white/5 flex items-center gap-2">
+                                                                 <X size={12} /> Remove Note
+                                                             </button>
+                                                         )}
+                                                         <button onClick={(e) => { e.stopPropagation(); deleteTrack(track.id); setOpenMenuId(null); }} className="w-full text-left px-3 py-2 text-xs text-red-400 hover:bg-white/5 flex items-center gap-2">
+                                                             <Trash2 size={12} /> Delete Track
+                                                         </button>
+                                                     </div>
+                                                 )}
+                                             </div>
+                                         </div>
+                                     </div>
+                                 )})}
+                             </div>
+                             
+                             <div className="mt-8 p-6 border border-dashed border-neutral-800 rounded-xl text-center text-neutral-500 text-xs flex flex-col items-center justify-center bg-white/[0.01]">
+                                 <p className="mb-2">Drag and drop Purchased Beats or Uploaded Files from the right panel onto a track to assign audio.</p>
+                                 <div className="flex gap-2">
+                                     <span className="px-2 py-1 bg-neutral-800 rounded text-[10px] border border-neutral-700">WAV</span>
+                                     <span className="px-2 py-1 bg-neutral-800 rounded text-[10px] border border-neutral-700">MP3</span>
+                                     <span className="px-2 py-1 bg-neutral-800 rounded text-[10px] border border-neutral-700">ZIP</span>
+                                 </div>
+                             </div>
+                        </div>
+                    )}
+
+                    {tab === 'contracts' && (
+                        <div className="max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-2">
+                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                 <div className="bg-neutral-900/30 border border-white/5 rounded-xl p-6">
+                                     <div className="flex items-center gap-3 mb-4">
+                                         <div className="p-2 bg-blue-500/20 text-blue-400 rounded-lg"><Briefcase size={20} /></div>
+                                         <div>
+                                             <h3 className="text-sm font-bold text-white">Project Contracts</h3>
+                                             <p className="text-xs text-neutral-500">Manage agreements for this release</p>
+                                         </div>
+                                     </div>
+                                     <div className="space-y-2">
+                                         {MOCK_CONTRACTS.slice(0,3).map(contract => (
+                                             <div 
+                                                key={contract.id} 
+                                                onClick={() => setActiveContract(contract)}
+                                                className="flex items-center justify-between p-3 bg-white/5 border border-white/5 rounded-lg hover:border-primary/30 hover:bg-white/10 cursor-pointer group"
+                                             >
+                                                 <div>
+                                                     <div className="text-xs font-bold text-white group-hover:text-primary transition-colors">{contract.title}</div>
+                                                     <div className="text-[10px] text-neutral-400">{contract.status.toUpperCase()} • {contract.created}</div>
+                                                 </div>
+                                                 <Eye size={14} className="text-neutral-500 group-hover:text-white" />
+                                             </div>
+                                         ))}
+                                         <button className="w-full py-2 mt-2 border border-dashed border-neutral-700 rounded-lg text-xs font-bold text-neutral-400 hover:text-white hover:border-neutral-500 flex items-center justify-center gap-2">
+                                             <Plus size={14} /> Link New Contract
+                                         </button>
+                                     </div>
+                                 </div>
+                             </div>
+                        </div>
+                    )}
+
+                    {tab === 'files' && (
+                        <div className="max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-2">
+                             <div className="bg-neutral-900/30 border border-white/5 rounded-xl overflow-hidden">
+                                 <div className="p-4 border-b border-white/5 flex items-center gap-4 bg-neutral-900/50">
+                                     <Folder size={16} className="text-neutral-400" />
+                                     <span className="text-sm font-bold text-white">Project Files</span>
+                                 </div>
+                                 <div className="p-8 text-center text-neutral-500 text-sm">
+                                     <p>No local files uploaded to this project workspace yet.</p>
+                                     <button className="mt-4 px-4 py-2 bg-white/5 border border-white/10 rounded hover:bg-white/10 text-white text-xs font-bold">Upload Files</button>
+                                 </div>
+                             </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* RIGHT SIDEBAR (Library / Inspector) */}
+                <div className="w-80 bg-[#080808] border-l border-neutral-800 flex flex-col">
+                    <div className="p-4 border-b border-white/5">
+                        <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-3">Library Assets</h3>
+                        
+                        {/* Filter Tabs */}
+                        <div className="flex bg-neutral-900 p-0.5 rounded-lg mb-3">
+                            {['All', 'Purchased', 'Uploaded'].map(f => (
+                                <button
+                                    key={f}
+                                    onClick={() => setLibraryFilter(f as any)}
+                                    className={`flex-1 py-1 text-[10px] font-bold rounded-md transition-colors ${libraryFilter === f ? 'bg-neutral-800 text-white shadow' : 'text-neutral-500 hover:text-neutral-300'}`}
+                                >
+                                    {f}
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="relative">
+                            <Search size={12} className="absolute left-2.5 top-2.5 text-neutral-500" />
+                            <input 
+                                value={librarySearch}
+                                onChange={(e) => setLibrarySearch(e.target.value)}
+                                className="w-full bg-neutral-900 border border-neutral-800 rounded-lg pl-8 py-2 text-xs text-white focus:outline-none focus:border-primary/30 placeholder-neutral-600" 
+                                placeholder="Search beats, packs..." 
+                            />
+                        </div>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                        {filteredLibrary.map(asset => (
+                            <div 
+                                key={asset.id}
+                                draggable
+                                onDragStart={() => setDraggingAsset(asset)}
+                                onDragEnd={() => setDraggingAsset(null)}
+                                className="p-3 rounded-lg hover:bg-white/5 border border-transparent hover:border-white/10 cursor-grab active:cursor-grabbing group transition-colors"
+                            >
+                                <div className="flex items-center gap-3 mb-1">
+                                    <div className={`p-1.5 rounded ${asset.type === 'Purchased' || asset.type === 'Project' ? 'bg-primary/10 text-primary' : 'bg-neutral-800 text-neutral-400'}`}>
+                                        {asset.type === 'Pack' || asset.type === 'Project' ? <Box size={12} /> : <Music size={12} />}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="text-xs font-bold text-white truncate group-hover:text-primary transition-colors">{asset.name}</div>
+                                        <div className="text-[9px] text-neutral-500">{asset.producer} • {asset.date}</div>
+                                    </div>
+                                </div>
+                                <div className="flex items-center justify-between mt-1 ml-9">
+                                    <span className="text-[9px] font-mono text-neutral-600 uppercase">{asset.fileType}</span>
+                                    {asset.type === 'Purchased' && (
+                                        <div className="text-[9px] text-green-500 flex items-center gap-1">
+                                            <ShieldCheck size={10} /> License Active
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                        {filteredLibrary.length === 0 && (
+                            <div className="text-center py-8 text-neutral-600 text-xs">
+                                No assets found.
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="p-4 border-t border-white/5 bg-neutral-900/30">
+                        <button className="w-full py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs font-bold text-white flex items-center justify-center gap-2 transition-colors">
+                            <Upload size={14} /> Upload New File
                         </button>
                     </div>
-                )}
-
-                {/* Placeholders for other tabs to demonstrate structure */}
-                {activeTab === 'soundpacks' && (
-                     <div className="text-center py-20">
-                        <Box size={48} className="mx-auto text-neutral-800 mb-4" />
-                        <p className="text-neutral-500 font-mono text-sm">No Soundpacks created yet.</p>
-                     </div>
-                )}
-                {activeTab === 'services' && (
-                     <div className="text-center py-20">
-                        <Settings size={48} className="mx-auto text-neutral-800 mb-4" />
-                        <p className="text-neutral-500 font-mono text-sm">Manage your services and pricing here.</p>
-                     </div>
-                )}
+                </div>
             </div>
         </div>
     );
 };
 
-const TabButton = ({ active, onClick, icon, label, count }: any) => (
+const TabBtn = ({ active, onClick, label, icon }: any) => (
     <button 
         onClick={onClick}
-        className={`
-            py-4 flex items-center gap-2 text-sm font-medium border-b-2 transition-all relative
-            ${active 
-                ? 'border-primary text-white' 
-                : 'border-transparent text-neutral-500 hover:text-neutral-300 hover:border-neutral-800'
-            }
-        `}
+        className={`px-4 py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all ${active ? 'bg-neutral-800 text-white shadow' : 'text-neutral-500 hover:text-neutral-300'}`}
     >
-        <span className={active ? 'text-primary' : ''}>{icon}</span>
-        <span className="tracking-wide">{label}</span>
-        {count !== undefined && (
-            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ml-1 ${active ? 'bg-primary/20 text-primary' : 'bg-neutral-800 text-neutral-500'}`}>
-                {count}
-            </span>
-        )}
+        {icon}
+        {label}
     </button>
 );
 

@@ -1,9 +1,10 @@
 
 import React, { useState } from 'react';
-import { DollarSign, Clock, List, Plus, X, Upload, Sparkles } from 'lucide-react';
+import { DollarSign, Clock, List, Plus, X, Sparkles } from 'lucide-react';
 
 const PostServicePage: React.FC = () => {
   const [features, setFeatures] = useState<string[]>(['']);
+  const [priceType, setPriceType] = useState<'fixed' | 'hourly'>('fixed');
 
   const addFeature = () => setFeatures([...features, '']);
   const removeFeature = (index: number) => setFeatures(features.filter((_, i) => i !== index));
@@ -14,13 +15,13 @@ const PostServicePage: React.FC = () => {
   };
 
   return (
-    <div className="w-full max-w-3xl mx-auto pb-32 pt-12 px-6 animate-in fade-in duration-500">
+    <div className="w-full max-w-3xl mx-auto pb-48 pt-12 px-6 animate-in fade-in duration-500">
         <div className="mb-10 text-center">
             <h1 className="text-3xl font-black text-white mb-3">Post a Service</h1>
             <p className="text-neutral-500 text-sm">Offer your production skills to the world.</p>
         </div>
 
-        <div className="bg-[#0a0a0a] border border-neutral-800 rounded-xl p-8 shadow-2xl">
+        <div className="bg-[#0a0a0a] border border-neutral-800 rounded-xl p-8 shadow-2xl mb-20">
             <form className="space-y-8">
                 {/* Title */}
                 <div className="space-y-2">
@@ -31,10 +32,35 @@ const PostServicePage: React.FC = () => {
                 <div className="grid grid-cols-2 gap-6">
                     {/* Price */}
                     <div className="space-y-2">
-                        <label className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2"><DollarSign size={14}/> Price</label>
+                        <div className="flex justify-between items-center">
+                            <label className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2"><DollarSign size={14}/> Price</label>
+                            <div className="flex bg-neutral-900 p-0.5 rounded border border-neutral-800">
+                                <button 
+                                    type="button"
+                                    onClick={() => setPriceType('fixed')}
+                                    className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors ${priceType === 'fixed' ? 'bg-neutral-700 text-white' : 'text-neutral-500 hover:text-neutral-300'}`}
+                                >
+                                    Fixed
+                                </button>
+                                <button 
+                                    type="button"
+                                    onClick={() => setPriceType('hourly')}
+                                    className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors ${priceType === 'hourly' ? 'bg-neutral-700 text-white' : 'text-neutral-500 hover:text-neutral-300'}`}
+                                >
+                                    /Hr
+                                </button>
+                            </div>
+                        </div>
                         <div className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500">$</span>
-                            <input type="number" className="w-full bg-neutral-900 border border-neutral-800 rounded-lg p-3 pl-8 text-white focus:border-primary/50 focus:outline-none font-mono" placeholder="150.00" />
+                            <input 
+                                type="number" 
+                                className="w-full bg-neutral-900 border border-neutral-800 rounded-lg p-3 pl-8 text-white focus:border-primary/50 focus:outline-none font-mono" 
+                                placeholder={priceType === 'fixed' ? "150.00" : "50.00"} 
+                            />
+                            {priceType === 'hourly' && (
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 text-xs font-mono">/hr</span>
+                            )}
                         </div>
                     </div>
                     {/* Delivery */}
@@ -68,15 +94,6 @@ const PostServicePage: React.FC = () => {
                     <button type="button" onClick={addFeature} className="text-xs font-bold text-primary flex items-center gap-1 hover:underline">
                         <Plus size={14} /> Add Feature
                     </button>
-                </div>
-
-                {/* Cover Image */}
-                <div className="space-y-2">
-                     <label className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2"><Upload size={14}/> Cover Image</label>
-                     <div className="border-2 border-dashed border-neutral-800 rounded-xl p-8 flex flex-col items-center justify-center text-neutral-500 hover:text-white hover:border-neutral-600 hover:bg-white/5 transition-all cursor-pointer">
-                        <Upload size={24} className="mb-2" />
-                        <span className="text-xs font-mono">Click to upload service thumbnail</span>
-                     </div>
                 </div>
 
                 <div className="pt-4 border-t border-white/5 flex justify-end">

@@ -24,10 +24,10 @@ const ManageServicesPage: React.FC = () => {
   const filteredOrders = MOCK_ORDERS.filter(o => filter === 'all' || o.status === filter);
 
   return (
-    <div className="w-full h-[calc(100vh-6rem)] max-w-[1600px] mx-auto pb-8 pt-6 px-6 lg:px-8 animate-in fade-in duration-500 flex flex-col">
+    <div className="w-full h-[calc(100vh-9rem)] max-w-[1600px] mx-auto pb-4 pt-6 px-6 lg:px-8 animate-in fade-in duration-500 flex flex-col">
         
         {/* Header */}
-        <div className="flex justify-between items-center mb-8 shrink-0">
+        <div className="flex justify-between items-center mb-6 shrink-0">
             <div>
                 <h1 className="text-3xl font-black text-white mb-2">Manage Orders</h1>
                 <p className="text-neutral-500 text-sm">Track and deliver your active services.</p>

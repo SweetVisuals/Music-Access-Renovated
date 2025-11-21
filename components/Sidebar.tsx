@@ -22,9 +22,11 @@ import {
   ArrowLeft,
   ShoppingBag,
   LayoutGrid,
-  Disc
+  Disc,
+  ChevronRight
 } from 'lucide-react';
 import { View } from '../types';
+import { MOCK_TALENT } from '../constants';
 
 interface SidebarProps {
   currentView: View;
@@ -185,7 +187,12 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate }) => {
                             active={currentView === 'dashboard-settings'}
                             onClick={() => onNavigate('dashboard-settings')}
                         />
-                        <SidebarItem icon={<HelpCircle size={16} />} label="Get Help" />
+                        <SidebarItem 
+                            icon={<HelpCircle size={16} />} 
+                            label="Get Help" 
+                            active={currentView === 'dashboard-help' || currentView === 'help'}
+                            onClick={() => onNavigate('help')}
+                        />
                     </nav>
                 </div>
             </>
@@ -240,6 +247,56 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate }) => {
                     </nav>
                 </div>
 
+                {/* FOLLOWING */}
+                <div>
+                    <div className="flex items-center justify-between px-3 mb-2 group cursor-pointer" onClick={() => onNavigate('browse-talent')}>
+                        <div className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest group-hover:text-neutral-300 transition-colors">
+                            Following
+                        </div>
+                        <span className="text-[9px] font-mono font-bold text-neutral-600 bg-neutral-900 border border-neutral-800 px-1.5 py-0.5 rounded">
+                            {MOCK_TALENT.length}
+                        </span>
+                    </div>
+                    <div className="space-y-1 mb-6">
+                        {MOCK_TALENT.slice(0, 4).map((talent) => (
+                             <div 
+                                key={talent.id}
+                                onClick={() => onNavigate('browse-talent')}
+                                className="w-full flex items-center gap-3 px-3 py-2 hover:bg-white/5 rounded-lg group transition-all text-left cursor-pointer"
+                             >
+                                <div className="relative shrink-0">
+                                    <img src={talent.avatar} alt={talent.username} className="w-8 h-8 rounded-md object-cover border border-white/10 group-hover:border-white/30 transition-colors" />
+                                    {talent.isVerified && (
+                                        <div className="absolute -bottom-1 -right-1 bg-[#050505] rounded-full p-[1.5px]">
+                                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="flex-1 min-w-0 overflow-hidden">
+                                    <div className="text-xs font-bold text-neutral-400 group-hover:text-white truncate transition-colors">{talent.username}</div>
+                                    <div className="text-[10px] text-neutral-600 font-mono truncate group-hover:text-neutral-500 transition-colors">{talent.handle}</div>
+                                </div>
+                                <button 
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onNavigate('dashboard-messages');
+                                    }}
+                                    className="p-1.5 text-neutral-500 hover:text-white hover:bg-white/10 rounded-md transition-all"
+                                >
+                                    <MessageSquare size={12} />
+                                </button>
+                             </div>
+                        ))}
+                        <button 
+                            onClick={() => onNavigate('browse-talent')}
+                            className="w-full flex items-center justify-between px-3 py-2 text-[10px] font-bold text-neutral-600 hover:text-white transition-colors group border-t border-white/5 mt-2"
+                        >
+                            <span>View all creators</span>
+                            <ChevronRight size={12} className="group-hover:translate-x-1 transition-transform" />
+                        </button>
+                    </div>
+                </div>
+
                 {/* LIBRARY */}
                 <div>
                     <div className="text-[10px] font-bold text-neutral-500 px-3 mb-2 uppercase tracking-widest">
@@ -253,11 +310,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate }) => {
                             onClick={() => onNavigate('library')}
                         />
                         <SidebarItem 
-                            icon={<ShoppingBag size={16} />} 
-                            label="Purchased" 
-                            onClick={() => onNavigate('dashboard-orders')}
-                        />
-                        <SidebarItem 
                             icon={<FileText size={16} />} 
                             label="Contracts" 
                             onClick={() => onNavigate('contracts')}
@@ -266,6 +318,27 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate }) => {
                             icon={<Clipboard size={16} />} 
                             label="Notes" 
                             onClick={() => onNavigate('notes')}
+                        />
+                    </nav>
+                </div>
+
+                {/* RESOURCES */}
+                <div>
+                    <div className="text-[10px] font-bold text-neutral-500 px-3 mb-2 uppercase tracking-widest">
+                        Resources
+                    </div>
+                    <nav className="space-y-0.5">
+                        <SidebarItem 
+                            icon={<Settings size={16} />} 
+                            label="Settings" 
+                            active={currentView === 'settings'}
+                            onClick={() => onNavigate('settings')}
+                        />
+                        <SidebarItem 
+                            icon={<HelpCircle size={16} />} 
+                            label="Get Help" 
+                            active={currentView === 'help'}
+                            onClick={() => onNavigate('help')}
                         />
                     </nav>
                 </div>

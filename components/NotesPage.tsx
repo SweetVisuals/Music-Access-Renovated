@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { MOCK_NOTES } from '../constants';
 import { 
     Plus, 
@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { getWritingAssistance } from '../services/geminiService';
 
-// Mock rhyme database helper
+// Mock rhyme database helper for suggestions sidebar
 const MOCK_RHYMES: Record<string, string[]> = {
     'ing': ['King', 'Sing', 'Ring', 'Thing', 'Wing', 'Spring', 'Bling', 'Swing', 'Cling', 'Fling'],
     'at': ['Cat', 'Bat', 'Sat', 'Flat', 'Mat', 'Chat', 'That', 'Stat', 'Brat', 'Slat'],
@@ -59,6 +59,107 @@ const RHYME_COLORS = [
     'text-red-400'
 ];
 
+// --- Dynamic Rhyme Analysis Engine ---
+const analyzeRhymeScheme = (text: string, accent: 'US' | 'UK' = 'US') => {
+    if (!text) return { wordToGroup: {}, groupToColor: {} };
+    
+    // Split into words, stripping punctuation for analysis
+    const words = text.split(/[^a-zA-Z']+/).filter(w => w.length > 0);
+    const wordToGroup: Record<string, string> = {};
+    const groupCounts: Record<string, number> = {};
+
+    const getPhoneticGroup = (word: string) => {
+        let lower = word.toLowerCase();
+        // Remove leading/trailing non-alpha
+        lower = lower.replace(/^[^a-z]+|[^a-z]+$/g, '');
+        
+        if (lower.length < 2) return null;
+        // Skip common stopwords
+        if (['the', 'a', 'an', 'and', 'is', 'in', 'it', 'to', 'of', 'for', 'my', 'on', 'at', 'by', 'but', 'or'].includes(lower)) return null;
+
+        // --- ACCENT OVERRIDES ---
+        if (accent === 'UK') {
+            if (lower.endsWith('ance') || lower.endsWith('anch')) return 'ah_sound'; // dance, chance, branch
+            if (lower.endsWith('ass') && lower !== 'bass') return 'ah_sound'; // grass, glass
+            if (lower.endsWith('ast')) return 'ah_sound'; // fast, last
+            if (lower.endsWith('path')) return 'ah_sound';
+            if (lower.endsWith('alf')) return 'ah_sound'; // half
+        }
+
+        // --- SLANT RHYME MAPPINGS ---
+
+        // 1. Long I group (find, ride, light, sky)
+        if (/ind$/.test(lower)) return 'long_i';
+        if (/ild$/.test(lower)) return 'long_i';
+        if (/igh(t?)$/.test(lower)) return 'long_i';
+        if (lower.endsWith('y') && !/[aeiou]y$/.test(lower) && lower.length <= 3) return 'long_i'; // my, fly, sky (but not play)
+        
+        // 2. Silent E Rules (ride, side, name, same)
+        // Pattern: Vowel + Consonant + e
+        // Exceptions: have (short a), love (uh), done (uh), gone (short o), one (uh)
+        if (lower === 'have') return 'short_a';
+        if (['love', 'dove', 'glove', 'shove'].includes(lower)) return 'uv_sound';
+        if (['one', 'done', 'none'].includes(lower)) return 'un_sound';
+        if (['gone'].includes(lower)) return 'short_o';
+
+        const silentEMatch = lower.match(/([aeiou])([^aeiou]+)e$/);
+        if (silentEMatch) {
+            const [_, vowel] = silentEMatch;
+            // Rough grouping: a_e -> long_a, i_e -> long_i, etc.
+            return `long_${vowel}`;
+        }
+
+        // 3. Vowel Teams & Standard Suffixes
+        const match = lower.match(/([aeiouy]+)([^aeiouy]*)$/);
+        if (!match) return null;
+        
+        const [full, vowels, coda] = match;
+        
+        // Long I (pie, die)
+        if (vowels === 'ie' && coda === '') return 'long_i';
+        if (vowels === 'uy') return 'long_i'; // buy, guy
+        
+        // OU / OW (out, down)
+        if ((vowels === 'ou' || vowels === 'ow') && ['t', 'nd', 'n', 'd', ''].includes(coda)) return 'ou_sound';
+        
+        // AY / AI (day, rain)
+        if (vowels === 'ay') return 'long_a';
+        if (vowels === 'ai' && coda === 'n') return 'long_a';
+        
+        // EE / EA (tree, heat)
+        if (vowels === 'ee' || vowels === 'ea') return 'long_e';
+        // Happy -> long_e sound
+        if (vowels === 'y' && coda === '' && lower.length > 3) return 'long_e';
+
+        // Fallback: Exact Vowel+Coda match (Cat -> at, Dog -> og)
+        return `${vowels}_${coda}`;
+    };
+
+    words.forEach(w => {
+        const group = getPhoneticGroup(w);
+        if (group) {
+            wordToGroup[w.toLowerCase()] = group;
+            groupCounts[group] = (groupCounts[group] || 0) + 1;
+        }
+    });
+
+    // Assign colors to groups with multiple words (matches)
+    const groupToColor: Record<string, string> = {};
+    let colorIndex = 0;
+    
+    // Sort groups by frequency desc so most common rhymes get colors first
+    const sortedGroups = Object.keys(groupCounts).sort((a, b) => groupCounts[b] - groupCounts[a]);
+    
+    sortedGroups.forEach(group => {
+        if (groupCounts[group] > 1) {
+            groupToColor[group] = RHYME_COLORS[colorIndex % RHYME_COLORS.length];
+            colorIndex++;
+        }
+    });
+
+    return { wordToGroup, groupToColor };
+};
+
 const NotesPage: React.FC = () => {
   const [notes, setNotes] = useState(MOCK_NOTES);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(notes[0].id);
@@ -82,6 +183,11 @@ const NotesPage: React.FC = () => {
   const backdropRef = useRef<HTMLDivElement>(null);
   
   const activeNote = notes.find(n => n.id === activeNoteId);
+
+  // Memoize analysis for performance
+  const { wordToGroup, groupToColor } = useMemo(() => 
+      activeNote ? analyzeRhymeScheme(activeNote.content, accent) : { wordToGroup: {}, groupToColor: {} }, 
+  [activeNote?.content, accent]);
 
   const handleUpdateContent = (val: string) => {
       if (!activeNote) return;
@@ -146,11 +252,10 @@ const NotesPage: React.FC = () => {
       setViewMode('editor');
   };
 
-  // --- Rhyme Logic ---
+  // --- Sidebar Suggestion Logic ---
   const getLastWord = (text: string, index: number) => {
       if (!text) return '';
       const textBefore = text.slice(0, index);
-      // Match word characters before cursor
       const match = textBefore.match(/([a-zA-Z']+)$/);
       return match ? match[1] : '';
   };
@@ -161,7 +266,7 @@ const NotesPage: React.FC = () => {
       if (!word || word.length < 2) return [];
       const lowerWord = word.toLowerCase();
       
-      // Simple heuristic suffix matching for demo
+      // Fallback to static list for suggestions sidebar
       for (const suffix in MOCK_RHYMES) {
           if (lowerWord.endsWith(suffix)) {
               return MOCK_RHYMES[suffix];
@@ -172,27 +277,21 @@ const NotesPage: React.FC = () => {
 
   const suggestions = getRhymeSuggestions(currentWord);
 
-  // Highlighting Logic
+  // --- Rendering Highlighting ---
   const renderHighlightedText = (text: string) => {
       if (!text) return null;
       
-      // Split by spaces and newlines but keep delimiters to preserve formatting
-      const tokens = text.split(/(\s+)/);
+      // Split text by delimiters but capture them to reconstruct text exactly
+      const tokens = text.split(/([^a-zA-Z0-9_']+)/);
       
       return tokens.map((token, i) => {
-          if (token.trim() === '') return token; // Return whitespace as is
-          
-          const lower = token.toLowerCase().replace(/[^a-z]/g, '');
-          let colorClass = 'text-neutral-300'; // Default color matching textarea
+          const lower = token.toLowerCase();
+          let colorClass = 'text-neutral-300'; // Default text color
           
           if (rhymeMode) {
-              // Very basic heuristic for visual demo of rhyme groups
-              for (let j = 0; j < Object.keys(MOCK_RHYMES).length; j++) {
-                  const suffix = Object.keys(MOCK_RHYMES)[j];
-                  if (lower.endsWith(suffix)) {
-                      colorClass = RHYME_COLORS[j % RHYME_COLORS.length];
-                      break;
-                  }
+              const group = wordToGroup[lower];
+              if (group && groupToColor[group]) {
+                  colorClass = groupToColor[group];
               }
           }
           
@@ -201,7 +300,7 @@ const NotesPage: React.FC = () => {
   };
 
   return (
-    <div className="w-full h-[calc(100vh-6rem)] max-w-[1600px] mx-auto pb-20 pt-6 px-6 lg:px-8 animate-in fade-in duration-500 flex flex-col">
+    <div className="w-full h-[calc(100vh-14rem)] max-w-[1600px] mx-auto pb-20 pt-6 px-6 lg:px-8 animate-in fade-in duration-500 flex flex-col">
         
         <div className="flex items-end justify-between mb-6">
              <div>
@@ -307,7 +406,7 @@ const NotesPage: React.FC = () => {
                                             `}
                                         >
                                             <Highlighter size={12} />
-                                            Rhyme highlighting and analysis
+                                            Rhyme highlighting {rhymeMode ? 'ON' : 'OFF'}
                                         </button>
                                         
                                         <div className="w-px h-4 bg-neutral-800"></div>

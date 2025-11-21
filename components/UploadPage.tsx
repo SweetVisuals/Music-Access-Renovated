@@ -1,10 +1,9 @@
-
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
     Search, 
     Folder, 
     MoreVertical, 
-    Upload, 
+    Upload as UploadIcon, 
     Plus, 
     ChevronRight, 
     ArrowUpDown, 
@@ -12,27 +11,37 @@ import {
     Music,
     Trash2,
     Edit,
-    Download,
-    Share,
     Info,
     FolderInput,
-    Eye,
+    FileText,
+    X,
+    Save,
+    Play,
+    Pause,
+    Check,
     Copy,
-    File
+    LayoutGrid,
+    Columns,
+    List
 } from 'lucide-react';
+import { Project, Track } from '../types';
+import { MOCK_PROJECTS } from '../constants';
 
-const INITIAL_FOLDERS = [
-    { id: 'f1', name: 'Project 1', created: '17/09/2025' }
-];
+// --- Types ---
+type FileType = 'folder' | 'audio' | 'text' | 'image';
 
-const INITIAL_FILES = [
-    { id: '1', title: 'Beat 2', format: 'MP3', size: '1.31 MB', uploaded: '17/09/2025' },
-    { id: '2', title: 'Beat 4', format: 'MP3', size: '2.23 MB', uploaded: '17/09/2025' },
-    { id: '3', title: 'Beat 5', format: 'MP3', size: '1.75 MB', uploaded: '17/09/2025' },
-    { id: '4', title: '(FREE) PARTYNEXTDOOR TYPE BEAT', format: 'MP3', size: '1.61 MB', uploaded: '07/10/2025' },
-    { id: '5', title: '(FREE) PARTYNEXTDOOR TYPE BEAT', format: 'MP3', size: '2.23 MB', uploaded: '07/10/2025' },
-    { id: '6', title: '(FREE) PARTYNEXTDOOR TYPE BEAT', format: 'MP3', size: '1.75 MB', uploaded: '07/10/2025' },
-];
+interface FileSystemItem {
+    id: string;
+    parentId: string | null;
+    name: string;
+    type: FileType;
+    size: string;
+    created: string;
+    format?: string;
+    content?: string; // For text files
+    src?: string;     // For audio mock
+    duration?: number; // in seconds
+}
 
 interface ContextMenuState {
     x: number;
@@ -41,17 +50,56 @@ interface ContextMenuState {
     targetId?: string;
 }
 
-const UploadPage: React.FC = () => {
-  const [folders, setFolders] = useState(INITIAL_FOLDERS);
-  const [files, setFiles] = useState(INITIAL_FILES);
-  
-  // Drag and Drop State
-  const [draggedFileId, setDraggedFileId] = useState<string | null>(null);
-  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
+type ViewMode = 'grid' | 'column';
 
-  // Context Menu State
+interface UploadPageProps {
+    onPlayTrack?: (project: Project, trackId: string) => void;
+    onTogglePlay?: () => void;
+    isPlaying?: boolean;
+    currentTrackId?: string | null;
+    currentProject?: Project | null;
+}
+
+// --- Mock Data ---
+const INITIAL_ITEMS: FileSystemItem[] = [
+    { id: 'f1', parentId: null, name: 'Project Alpha', type: 'folder', size: '-', created: '17/09/2025' },
+    { id: 'f2', parentId: null, name: 'Drum Kits', type: 'folder', size: '-', created: '18/09/2025' },
+    { id: 'f3', parentId: 'f2', name: 'Trap_Vol_1', type: 'folder', size: '-', created: '18/09/2025' },
+    { id: '1', parentId: null, name: 'Beat_v2_Final.mp3', type: 'audio', format: 'MP3', size: '4.2 MB', created: '17/09/2025', duration: 245 },
+    { id: '2', parentId: null, name: 'Melody_Loop.wav', type: 'audio', format: 'WAV', size: '12.5 MB', created: '17/09/2025', duration: 12 },
+    { id: '3', parentId: 'f1', name: 'Alpha_Demo.mp3', type: 'audio', format: 'MP3', size: '3.1 MB', created: '20/09/2025', duration: 180 },
+    { id: '4', parentId: null, name: 'Ideas.txt', type: 'text', size: '2 KB', created: '21/09/2025', content: '1. Dark piano intro\n2. Switch to halftime at bar 16\n3. Add vocal chops from pack 2' },
+    { id: '5', parentId: 'f3', name: 'Kick_Hard.wav', type: 'audio', format: 'WAV', size: '0.2 MB', created: '18/09/2025', duration: 1 },
+    { id: '6', parentId: 'f3', name: 'Snare_Snap.wav', type: 'audio', format: 'WAV', size: '0.1 MB', created: '18/09/2025', duration: 1 },
+];
+
+const UploadPage: React.FC<UploadPageProps> = ({ onPlayTrack, onTogglePlay, isPlaying, currentTrackId, currentProject }) => {
+  // File System State
+  const [items, setItems] = useState<FileSystemItem[]>(INITIAL_ITEMS);
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+  
+  // View State
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [selectedPath, setSelectedPath] = useState<string[]>([]); // For Column View: IDs of selected items in order
+
+  // Interaction State
+  const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+
+  // Modals State
+  const [textEditorItem, setTextEditorItem] = useState<FileSystemItem | null>(null);
+  const [infoItem, setInfoItem] = useState<FileSystemItem | null>(null);
+  const [editorContent, setEditorContent] = useState('');
+  const [noteSuccess, setNoteSuccess] = useState(false);
+
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // --- Derived State ---
+  const currentItems = useMemo(() => items.filter(item => item.parentId === currentFolderId), [items, currentFolderId]);
+  const currentFolder = items.find(i => i.id === currentFolderId);
 
   // Close menu on outside click
   useEffect(() => {
@@ -60,78 +108,265 @@ const UploadPage: React.FC = () => {
       return () => document.removeEventListener('click', handleClick);
   }, []);
 
-  // --- Drag and Drop Handlers ---
+  // --- Actions ---
 
-  const handleDragStart = (e: React.DragEvent, fileId: string) => {
-      setDraggedFileId(fileId);
-      e.dataTransfer.effectAllowed = "move";
-      // Create a cleaner drag image if desired, strictly mostly handled by browser
-  };
-
-  const handleDragOver = (e: React.DragEvent, folderId: string) => {
-      e.preventDefault(); // Necessary to allow dropping
-      if (dragOverFolderId !== folderId) {
-          setDragOverFolderId(folderId);
+  const handleNavigate = (folderId: string | null) => {
+      setCurrentFolderId(folderId);
+      setContextMenu(null);
+      // Reset selection path for column view when navigating in grid view
+      if (folderId === null) {
+          setSelectedPath([]);
+      } else {
+          // Try to reconstruct path (simple reconstruction)
+          // In a real app, you'd traverse up. Here we just reset to start fresh from this folder in column view if we switched
+          // But generally view modes handle state differently.
       }
   };
 
-  const handleDragLeave = (e: React.DragEvent) => {
-      // Only clear if we are leaving the element (simple check)
-      // setDragOverFolderId(null); // Can be glitchy with children, skipping for smoother UX
+  const handleNavigateUp = () => {
+      if (currentFolder) {
+          setCurrentFolderId(currentFolder.parentId);
+      }
   };
 
-  const handleDrop = (e: React.DragEvent, folderId: string) => {
+  // Create
+  const handleCreateFolder = () => {
+      const newFolder: FileSystemItem = {
+          id: `folder-${Date.now()}`,
+          parentId: currentFolderId,
+          name: 'New Folder',
+          type: 'folder',
+          size: '-',
+          created: new Date().toLocaleDateString()
+      };
+      setItems([...items, newFolder]);
+      setRenamingId(newFolder.id);
+      setRenameValue(newFolder.name);
+      setContextMenu(null);
+  };
+
+  const handleCreateTextFile = () => {
+      const newFile: FileSystemItem = {
+          id: `file-${Date.now()}`,
+          parentId: currentFolderId,
+          name: 'New Text.txt',
+          type: 'text',
+          size: '0 KB',
+          created: new Date().toLocaleDateString(),
+          content: ''
+      };
+      setItems([...items, newFile]);
+      setRenamingId(newFile.id);
+      setRenameValue(newFile.name);
+      setTextEditorItem(newFile); // Open editor immediately
+      setEditorContent('');
+      setContextMenu(null);
+  };
+
+  // Delete
+  const handleDelete = (id: string) => {
+      // Recursive delete if folder
+      const idsToDelete = new Set<string>([id]);
+      
+      const collectChildren = (parentId: string) => {
+          items.filter(i => i.parentId === parentId).forEach(child => {
+              idsToDelete.add(child.id);
+              if(child.type === 'folder') collectChildren(child.id);
+          });
+      };
+      collectChildren(id);
+
+      setItems(items.filter(i => !idsToDelete.has(i.id)));
+      setContextMenu(null);
+      
+      // If deleted item was in path, truncate path
+      if (selectedPath.includes(id)) {
+          const idx = selectedPath.indexOf(id);
+          setSelectedPath(selectedPath.slice(0, idx));
+      }
+  };
+
+  // Rename
+  const handleStartRename = (item: FileSystemItem) => {
+      setRenamingId(item.id);
+      setRenameValue(item.name);
+      setContextMenu(null);
+  };
+
+  const handleFinishRename = () => {
+      if (renamingId) {
+          setItems(items.map(i => i.id === renamingId ? { ...i, name: renameValue } : i));
+          setRenamingId(null);
+      }
+  };
+
+  // Playback - Integration with Global Player
+  const handlePlay = (item: FileSystemItem) => {
+      if (item.type !== 'audio') return;
+      
+      if (currentProject?.id === 'upload_browser_proj' && currentTrackId === item.id && onTogglePlay) {
+          onTogglePlay();
+          return;
+      }
+
+      if (onPlayTrack) {
+          // Create a temporary project context for the player
+          // Include all audio files in the same folder so next/prev might conceptually work
+          const folderFiles = items.filter(i => i.parentId === item.parentId && i.type === 'audio');
+          
+          const tempProject: Project = {
+              id: 'upload_browser_proj',
+              title: 'Upload Browser',
+              producer: 'Local Files',
+              price: 0,
+              bpm: 0,
+              key: '-',
+              genre: 'Uploads',
+              type: 'beat_tape',
+              tags: ['Local'],
+              tracks: folderFiles.map(f => ({
+                  id: f.id,
+                  title: f.name,
+                  duration: f.duration || 180,
+                  files: { mp3: 'mock' } // Mock
+              })),
+              // Mock other required fields
+              created: new Date().toISOString()
+          };
+
+          onPlayTrack(tempProject, item.id);
+      }
+  };
+
+  // Text Editor
+  const openTextEditor = (item: FileSystemItem) => {
+      setTextEditorItem(item);
+      setEditorContent(item.content || '');
+      setContextMenu(null);
+  };
+
+  const saveTextFile = () => {
+      if (textEditorItem) {
+          setItems(items.map(i => i.id === textEditorItem.id ? { ...i, content: editorContent, size: `${editorContent.length} B` } : i));
+          setTextEditorItem(null);
+      }
+  };
+
+  const addToNotes = () => {
+      setNoteSuccess(true);
+      setTimeout(() => setNoteSuccess(false), 2000);
+  };
+
+  // Info
+  const openInfo = (item: FileSystemItem) => {
+      setInfoItem(item);
+      setContextMenu(null);
+  };
+
+  // Drag & Drop
+  const handleDrop = (e: React.DragEvent, targetFolderId: string | null) => {
       e.preventDefault();
       e.stopPropagation();
       setDragOverFolderId(null);
 
-      if (draggedFileId) {
-          const fileMoved = files.find(f => f.id === draggedFileId);
-          if (fileMoved) {
-              // Remove file from current list (Simulating move)
-              setFiles(prev => prev.filter(f => f.id !== draggedFileId));
-              
-              // In a real app, we'd API call here. For now, console log.
-              console.log(`Moved "${fileMoved.title}" to folder ID: ${folderId}`);
-          }
-          setDraggedFileId(null);
+      if (draggedItemId && draggedItemId !== targetFolderId) {
+         setItems(items.map(i => i.id === draggedItemId ? { ...i, parentId: targetFolderId } : i));
+         setDraggedItemId(null);
       }
   };
 
-  // --- Context Menu Handlers ---
-
+  // Context Menu
   const handleContextMenu = (e: React.MouseEvent, type: 'file' | 'folder' | 'background', targetId?: string) => {
-      e.preventDefault(); // Prevent browser menu
-      e.stopPropagation(); // Prevent bubbling (e.g. clicking file shouldn't trigger background menu)
-      
-      // Adjust position if close to edge (basic implementation)
-      const x = e.clientX;
-      const y = e.clientY;
-
-      setContextMenu({ x, y, type, targetId });
+      e.preventDefault();
+      e.stopPropagation();
+      setContextMenu({ x: e.clientX, y: e.clientY, type, targetId });
   };
+
+  // --- Column View Logic ---
+  const getColumns = () => {
+      const cols: { items: FileSystemItem[], selectedId: string | null }[] = [];
+      
+      // Root Column
+      cols.push({
+          items: items.filter(i => i.parentId === null),
+          selectedId: selectedPath[0] || null
+      });
+
+      // Subsequent Columns
+      for (let i = 0; i < selectedPath.length; i++) {
+          const id = selectedPath[i];
+          const item = items.find(x => x.id === id);
+          
+          if (item && item.type === 'folder') {
+              const children = items.filter(x => x.parentId === id);
+              // Only add next column if there are children or it's a folder
+              cols.push({
+                  items: children,
+                  selectedId: selectedPath[i + 1] || null
+              });
+          } else if (item) {
+              // It's a file, show preview column?
+              // Standard column view shows file info/preview in the last column
+          }
+      }
+      return cols;
+  };
+
+  const handleColumnItemClick = (item: FileSystemItem, depth: number) => {
+      // Update path: truncate at depth, append new item
+      const newPath = selectedPath.slice(0, depth);
+      newPath.push(item.id);
+      setSelectedPath(newPath);
+
+      if (item.type !== 'folder') {
+          // If file, maybe play or show preview?
+          // For now, just select it. Play on double click or specific action.
+      }
+  };
+  
+  // Get selected file for preview column
+  const lastSelectedId = selectedPath[selectedPath.length - 1];
+  const lastSelectedItem = items.find(i => i.id === lastSelectedId);
+  const showPreviewColumn = lastSelectedItem && lastSelectedItem.type !== 'folder';
 
   return (
     <div 
         className="w-full max-w-[1600px] mx-auto pb-32 pt-6 px-6 lg:px-8 animate-in fade-in duration-500 min-h-[80vh]"
         onContextMenu={(e) => handleContextMenu(e, 'background')}
     >
-        
         {/* Header & Breadcrumb */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-            <div className="flex items-center space-x-2 text-sm font-medium text-neutral-400">
-                <span className="hover:text-white cursor-pointer transition-colors">All Files</span>
-                <ChevronRight size={14} />
-                <span className="text-white font-bold">Beats</span>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+            <div className="flex items-center space-x-2 text-sm font-medium">
+                {viewMode === 'grid' ? (
+                    <>
+                        <button 
+                            onClick={() => handleNavigate(null)} 
+                            className={`hover:text-white transition-colors ${!currentFolderId ? 'text-white font-bold' : 'text-neutral-400'}`}
+                        >
+                            All Files
+                        </button>
+                        {currentFolder && (
+                            <>
+                                <ChevronRight size={14} className="text-neutral-600" />
+                                <span className="text-white font-bold">{currentFolder.name}</span>
+                            </>
+                        )}
+                    </>
+                ) : (
+                    <span className="text-white font-bold">Column Browser</span>
+                )}
             </div>
             
             <div className="flex items-center space-x-3">
-                 <button className="flex items-center space-x-2 px-4 py-2 rounded-lg border border-white/10 text-neutral-300 hover:bg-white/5 hover:text-white transition-colors text-xs font-bold">
+                 <button 
+                    onClick={handleCreateFolder}
+                    className="flex items-center space-x-2 px-4 py-2 rounded-lg border border-white/10 text-neutral-300 hover:bg-white/5 hover:text-white transition-colors text-xs font-bold"
+                >
                     <Plus size={14} />
                     <span>New Folder</span>
                  </button>
                  <button className="flex items-center space-x-2 px-4 py-2 rounded-lg bg-white text-black hover:bg-neutral-200 transition-colors text-xs font-bold shadow-[0_0_10px_rgba(255,255,255,0.2)]">
-                    <Upload size={14} />
+                    <UploadIcon size={14} />
                     <span>Upload Files</span>
                  </button>
             </div>
@@ -143,178 +378,394 @@ const UploadPage: React.FC = () => {
                  <Search size={14} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-500" />
                  <input 
                     type="text" 
-                    placeholder="Search files and folders..."
+                    placeholder="Search files..."
                     className="w-full bg-transparent border-none focus:ring-0 text-sm text-white pl-9 pr-4 py-2 placeholder-neutral-600"
                  />
              </div>
              
-             <div className="flex items-center space-x-2 px-2">
+             <div className="flex items-center gap-3 px-2">
+                 <div className="flex items-center bg-neutral-900 rounded-lg border border-white/5 p-0.5">
+                     <button 
+                        onClick={() => setViewMode('grid')}
+                        className={`p-1.5 rounded-md transition-all ${viewMode === 'grid' ? 'bg-white/10 text-white' : 'text-neutral-500 hover:text-neutral-300'}`}
+                        title="Grid View"
+                     >
+                         <LayoutGrid size={16} />
+                     </button>
+                     <button 
+                        onClick={() => setViewMode('column')}
+                        className={`p-1.5 rounded-md transition-all ${viewMode === 'column' ? 'bg-white/10 text-white' : 'text-neutral-500 hover:text-neutral-300'}`}
+                        title="Column View"
+                     >
+                         <Columns size={16} />
+                     </button>
+                 </div>
+
+                 <div className="h-4 w-px bg-white/10"></div>
+
                  <button className="flex items-center space-x-2 px-3 py-1.5 rounded hover:bg-white/5 text-neutral-400 hover:text-white transition-colors text-xs font-mono border border-transparent hover:border-white/5">
                     <ArrowUpDown size={12} />
                     <span>Sort: Date</span>
                  </button>
-                 <button className="p-2 rounded hover:bg-white/5 text-neutral-400 hover:text-white transition-colors border border-transparent hover:border-white/5">
-                    <Filter size={14} />
-                 </button>
              </div>
         </div>
 
-        {/* Folders Section */}
-        <div className="mb-8">
-            <h3 className="text-sm font-bold text-white mb-4">Folders</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {folders.map(folder => (
-                    <div 
-                        key={folder.id} 
-                        className={`
-                            group p-4 bg-[#0a0a0a] border rounded-xl transition-all cursor-pointer flex items-center justify-between
-                            ${dragOverFolderId === folder.id 
-                                ? 'border-primary bg-primary/10 scale-105 shadow-[0_0_20px_rgba(var(--primary),0.2)]' 
-                                : 'border-white/5 hover:border-white/20'
-                            }
-                        `}
-                        onDragOver={(e) => handleDragOver(e, folder.id)}
-                        onDragLeave={handleDragLeave}
-                        onDrop={(e) => handleDrop(e, folder.id)}
-                        onContextMenu={(e) => handleContextMenu(e, 'folder', folder.id)}
-                    >
-                        <div className="flex items-center space-x-3 pointer-events-none">
-                            <Folder 
-                                size={20} 
-                                className={`
-                                    transition-colors 
-                                    ${dragOverFolderId === folder.id ? 'text-primary' : 'text-neutral-500 group-hover:text-white'}
-                                `} 
-                            />
-                            <div>
-                                <div className={`text-sm font-bold transition-colors ${dragOverFolderId === folder.id ? 'text-primary' : 'text-white group-hover:text-primary'}`}>
-                                    {folder.name}
-                                </div>
-                                <div className="text-[10px] text-neutral-500 font-mono">Created {folder.created}</div>
-                            </div>
+        {/* Main Content Area */}
+        <div 
+            className="min-h-[500px] bg-[#050505] border border-white/5 rounded-xl overflow-hidden relative"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+                if(currentFolderId !== null && viewMode === 'grid') {
+                     // Do nothing
+                } else {
+                    handleDrop(e, null);
+                }
+            }}
+        >
+            {viewMode === 'grid' ? (
+                // --- GRID VIEW ---
+                <div className="p-6">
+                    {currentItems.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-64 border border-dashed border-neutral-800 rounded-xl text-neutral-600">
+                            <FolderInput size={48} className="mb-4 opacity-50" />
+                            <p className="text-sm font-bold">This folder is empty</p>
+                            <p className="text-xs">Right click to create new items or drag files here.</p>
                         </div>
-                        <button className="opacity-0 group-hover:opacity-100 transition-opacity text-neutral-500 hover:text-white p-1">
-                            <MoreVertical size={14} />
-                        </button>
-                    </div>
-                ))}
-            </div>
-        </div>
-
-        {/* Dropzone */}
-        <div className="mb-8 border border-dashed border-neutral-800 rounded-xl py-8 flex flex-col items-center justify-center text-neutral-500 hover:text-neutral-300 hover:border-neutral-700 transition-colors cursor-pointer bg-white/[0.01] hover:bg-white/[0.02]">
-            <span className="text-xs font-mono tracking-wide">Drop files/folders here to move back to root directory</span>
-        </div>
-
-        {/* Beats Section */}
-        <div className="min-h-[200px]">
-             <div className="flex items-center space-x-2 mb-4">
-                <h3 className="text-sm font-bold text-white">Beats</h3>
-             </div>
-             
-             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                 {files.map(file => (
-                     <div 
-                        key={file.id} 
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, file.id)}
-                        onContextMenu={(e) => handleContextMenu(e, 'file', file.id)}
-                        className={`
-                            group bg-[#0a0a0a] border border-white/5 rounded-xl overflow-hidden transition-all
-                            ${draggedFileId === file.id ? 'opacity-50 border-dashed' : 'hover:border-primary/30 hover:shadow-[0_0_20px_rgba(var(--primary),0.05)]'}
-                        `}
-                     >
-                         {/* Thumbnail Area */}
-                         <div className="aspect-video bg-neutral-900 relative flex items-center justify-center group-hover:bg-neutral-800 transition-colors cursor-grab active:cursor-grabbing">
-                             <div className="w-10 h-10 rounded-full border border-white/10 flex items-center justify-center">
-                                <Music size={16} className="text-neutral-500 group-hover:text-primary transition-colors" />
-                             </div>
-                             <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                 <button 
-                                    onClick={(e) => handleContextMenu(e, 'file', file.id)}
-                                    className="p-1 bg-black/50 rounded hover:bg-black text-white"
+                    ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                            {/* FOLDERS */}
+                            {currentItems.filter(i => i.type === 'folder').map(folder => (
+                                <div 
+                                    key={folder.id} 
+                                    draggable
+                                    onDragStart={() => setDraggedItemId(folder.id)}
+                                    onDragOver={(e) => { e.preventDefault(); setDragOverFolderId(folder.id); }}
+                                    onDragLeave={() => setDragOverFolderId(null)}
+                                    onDrop={(e) => handleDrop(e, folder.id)}
+                                    onDoubleClick={() => handleNavigate(folder.id)}
+                                    onContextMenu={(e) => handleContextMenu(e, 'folder', folder.id)}
+                                    className={`
+                                        group p-4 bg-neutral-900/30 border rounded-xl transition-all cursor-pointer flex flex-col items-center justify-center relative aspect-square hover:bg-white/5
+                                        ${dragOverFolderId === folder.id 
+                                            ? 'border-primary bg-primary/10 scale-105 shadow-[0_0_20px_rgba(var(--primary),0.2)]' 
+                                            : 'border-transparent'
+                                        }
+                                    `}
                                 >
-                                     <MoreVertical size={12} />
+                                    <Folder 
+                                        size={32} 
+                                        className={`mb-3 transition-colors ${dragOverFolderId === folder.id ? 'text-primary' : 'text-neutral-500 group-hover:text-white'}`} 
+                                    />
+                                    {renamingId === folder.id ? (
+                                        <input 
+                                            autoFocus
+                                            value={renameValue}
+                                            onChange={(e) => setRenameValue(e.target.value)}
+                                            onBlur={handleFinishRename}
+                                            onKeyDown={(e) => e.key === 'Enter' && handleFinishRename()}
+                                            className="w-full bg-black border border-primary text-white text-xs px-1 rounded text-center"
+                                            onClick={(e) => e.stopPropagation()}
+                                        />
+                                    ) : (
+                                        <div className="text-xs font-bold text-center truncate w-full px-2 group-hover:text-white text-neutral-300">{folder.name}</div>
+                                    )}
+                                    
+                                    <button 
+                                        onClick={(e) => handleContextMenu(e, 'folder', folder.id)}
+                                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-neutral-500 hover:text-white"
+                                    >
+                                        <MoreVertical size={14} />
+                                    </button>
+                                </div>
+                            ))}
+
+                            {/* FILES */}
+                            {currentItems.filter(i => i.type !== 'folder').map(file => {
+                                const isPlayingFile = currentProject?.id === 'upload_browser_proj' && currentTrackId === file.id && isPlaying;
+                                return (
+                                    <div 
+                                        key={file.id} 
+                                        draggable
+                                        onDragStart={() => setDraggedItemId(file.id)}
+                                        onClick={() => file.type === 'audio' ? handlePlay(file) : null}
+                                        onDoubleClick={() => file.type === 'text' ? openTextEditor(file) : null}
+                                        onContextMenu={(e) => handleContextMenu(e, 'file', file.id)}
+                                        className={`
+                                            group bg-neutral-900/30 border border-transparent rounded-xl p-3 flex flex-col items-center relative select-none hover:bg-white/5 transition-all
+                                            ${draggedItemId === file.id ? 'opacity-50 border-dashed' : ''}
+                                            ${isPlayingFile ? 'border-primary bg-primary/10' : ''}
+                                        `}
+                                    >
+                                        <div className="w-full aspect-square rounded-lg bg-neutral-900 flex items-center justify-center mb-3 relative overflow-hidden border border-white/5 group-hover:border-white/20">
+                                            {isPlayingFile ? (
+                                                <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                                                     <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-black animate-pulse">
+                                                         <Pause size={16} fill="black" />
+                                                     </div>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    {file.type === 'audio' && <Music size={24} className="text-neutral-600 group-hover:text-primary transition-colors" />}
+                                                    {file.type === 'text' && <FileText size={24} className="text-neutral-600 group-hover:text-white transition-colors" />}
+                                                </>
+                                            )}
+                                            
+                                            {file.type === 'audio' && !isPlayingFile && (
+                                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
+                                                    <div className="w-8 h-8 rounded-full bg-white text-black flex items-center justify-center">
+                                                        <Play size={14} fill="black" className="ml-0.5" />
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {renamingId === file.id ? (
+                                            <input 
+                                                autoFocus
+                                                value={renameValue}
+                                                onChange={(e) => setRenameValue(e.target.value)}
+                                                onBlur={handleFinishRename}
+                                                onKeyDown={(e) => e.key === 'Enter' && handleFinishRename()}
+                                                className="w-full bg-black border border-primary text-white text-xs px-1 rounded text-center"
+                                                onClick={(e) => e.stopPropagation()}
+                                            />
+                                        ) : (
+                                            <div className={`text-xs font-bold text-center truncate w-full ${isPlayingFile ? 'text-primary' : 'text-neutral-300'}`}>
+                                                {file.name}
+                                            </div>
+                                        )}
+                                        
+                                        <div className="text-[10px] text-neutral-500 mt-1">{file.size}</div>
+                                        
+                                        <button 
+                                            onClick={(e) => handleContextMenu(e, 'file', file.id)}
+                                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-white p-1 bg-black/50 rounded"
+                                        >
+                                            <MoreVertical size={12} />
+                                        </button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            ) : (
+                // --- COLUMN VIEW ---
+                <div className="flex h-[600px] overflow-x-auto custom-scrollbar divide-x divide-white/5">
+                    {getColumns().map((col, colIndex) => (
+                        <div key={colIndex} className="w-64 shrink-0 overflow-y-auto custom-scrollbar bg-neutral-900/20">
+                            {col.items.map(item => {
+                                const isSelected = col.selectedId === item.id;
+                                const isPlayingFile = currentProject?.id === 'upload_browser_proj' && currentTrackId === item.id && isPlaying;
+                                
+                                return (
+                                    <div 
+                                        key={item.id}
+                                        onClick={() => handleColumnItemClick(item, colIndex)}
+                                        onContextMenu={(e) => handleContextMenu(e, item.type === 'folder' ? 'folder' : 'file', item.id)}
+                                        className={`
+                                            flex items-center gap-2 px-4 py-2 text-sm cursor-pointer whitespace-nowrap border-b border-transparent
+                                            ${isSelected ? 'bg-primary text-black font-bold' : 'text-neutral-400 hover:bg-white/5 hover:text-white'}
+                                            ${isPlayingFile && !isSelected ? 'text-primary' : ''}
+                                        `}
+                                    >
+                                        {item.type === 'folder' ? (
+                                            <Folder size={14} className={isSelected ? 'text-black' : 'text-neutral-500'} />
+                                        ) : item.type === 'audio' ? (
+                                            <Music size={14} className={isSelected ? 'text-black' : 'text-neutral-500'} />
+                                        ) : (
+                                            <FileText size={14} className={isSelected ? 'text-black' : 'text-neutral-500'} />
+                                        )}
+                                        
+                                        <span className="truncate flex-1">{item.name}</span>
+                                        
+                                        {item.type === 'folder' && <ChevronRight size={12} className={isSelected ? 'text-black' : 'text-neutral-600'} />}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ))}
+
+                    {/* Preview Column */}
+                    {showPreviewColumn && lastSelectedItem && (
+                         <div className="w-80 shrink-0 bg-[#080808] p-8 flex flex-col items-center text-center border-l border-white/10">
+                             <div className="w-32 h-32 bg-neutral-900 rounded-2xl border border-white/10 flex items-center justify-center mb-6 shadow-2xl relative">
+                                 {lastSelectedItem.type === 'audio' ? (
+                                     <Music size={48} className="text-neutral-600" />
+                                 ) : (
+                                     <FileText size={48} className="text-neutral-600" />
+                                 )}
+                                 
+                                 {lastSelectedItem.type === 'audio' && (
+                                     <button 
+                                        onClick={() => handlePlay(lastSelectedItem)}
+                                        className="absolute -bottom-4 -right-4 w-12 h-12 bg-primary text-black rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform"
+                                     >
+                                         {(currentProject?.id === 'upload_browser_proj' && currentTrackId === lastSelectedItem.id && isPlaying) 
+                                            ? <Pause size={20} fill="black" /> 
+                                            : <Play size={20} fill="black" className="ml-1" />
+                                         }
+                                     </button>
+                                 )}
+                             </div>
+
+                             <h3 className="text-xl font-bold text-white mb-2 break-all">{lastSelectedItem.name}</h3>
+                             <p className="text-sm text-neutral-500 font-mono mb-6">{lastSelectedItem.size} • {lastSelectedItem.format || lastSelectedItem.type.toUpperCase()}</p>
+                             
+                             <div className="w-full space-y-4">
+                                 <div className="bg-white/5 rounded-lg p-4 text-left">
+                                     <div className="text-[10px] text-neutral-500 uppercase font-bold mb-2">Information</div>
+                                     <div className="grid grid-cols-2 gap-y-2 text-xs">
+                                         <span className="text-neutral-400">Created</span>
+                                         <span className="text-white text-right">{lastSelectedItem.created}</span>
+                                         <span className="text-neutral-400">Duration</span>
+                                         <span className="text-white text-right">{lastSelectedItem.duration ? `${Math.floor(lastSelectedItem.duration/60)}:${(lastSelectedItem.duration%60).toString().padStart(2,'0')}` : '-'}</span>
+                                     </div>
+                                 </div>
+                                 
+                                 <button className="w-full py-3 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-bold text-white transition-colors">
+                                     Download File
                                  </button>
                              </div>
                          </div>
-                         
-                         {/* Info */}
-                         <div className="p-3">
-                             <div className="flex items-start justify-between gap-2 mb-3">
-                                 <h4 className="text-xs font-bold text-white truncate leading-snug group-hover:text-primary transition-colors select-none">{file.title}</h4>
-                             </div>
-                             
-                             <div className="space-y-1 pointer-events-none">
-                                 <div className="flex items-center justify-between text-[9px] font-mono text-neutral-500">
-                                     <span>Format:</span>
-                                     <span className="text-neutral-300">{file.format}</span>
-                                 </div>
-                                 <div className="flex items-center justify-between text-[9px] font-mono text-neutral-500">
-                                     <span>Size:</span>
-                                     <span className="text-neutral-300">{file.size}</span>
-                                 </div>
-                                 <div className="flex items-center justify-between text-[9px] font-mono text-neutral-500">
-                                     <span>Uploaded:</span>
-                                     <span className="text-neutral-300">{file.uploaded}</span>
-                                 </div>
-                             </div>
-                         </div>
-                     </div>
-                 ))}
-             </div>
+                    )}
+                </div>
+            )}
         </div>
 
-        {/* CUSTOM CONTEXT MENU */}
+        {/* TEXT EDITOR MODAL */}
+        {textEditorItem && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                <div className="w-full max-w-2xl bg-[#0a0a0a] border border-neutral-700 rounded-xl shadow-2xl flex flex-col max-h-[80vh]">
+                    <div className="flex items-center justify-between p-4 border-b border-white/10 bg-neutral-900/50">
+                        <div className="flex items-center gap-2">
+                            <FileText size={16} className="text-primary" />
+                            <span className="text-sm font-bold text-white">{textEditorItem.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button 
+                                onClick={addToNotes}
+                                className={`
+                                    flex items-center gap-2 px-3 py-1.5 rounded text-xs font-bold transition-all
+                                    ${noteSuccess ? 'bg-green-500/20 text-green-400' : 'bg-white/5 hover:bg-white/10 text-neutral-300'}
+                                `}
+                            >
+                                {noteSuccess ? <Check size={14} /> : <Copy size={14} />}
+                                {noteSuccess ? 'Saved to Notebook' : 'Add to Notes'}
+                            </button>
+                            <button onClick={() => setTextEditorItem(null)} className="p-1.5 hover:bg-white/10 rounded text-neutral-400 hover:text-white">
+                                <X size={16} />
+                            </button>
+                        </div>
+                    </div>
+                    <textarea 
+                        value={editorContent}
+                        onChange={(e) => setEditorContent(e.target.value)}
+                        className="flex-1 bg-[#050505] p-6 text-sm text-neutral-300 font-mono focus:outline-none resize-none"
+                        placeholder="Start typing..."
+                    />
+                    <div className="p-4 border-t border-white/10 flex justify-end gap-3">
+                         <button onClick={() => setTextEditorItem(null)} className="px-4 py-2 rounded text-xs font-bold text-neutral-500 hover:text-white">Cancel</button>
+                         <button onClick={saveTextFile} className="px-4 py-2 bg-primary text-black rounded text-xs font-bold hover:bg-primary/90 flex items-center gap-2">
+                             <Save size={14} /> Save File
+                         </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* INFO MODAL */}
+        {infoItem && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                 <div className="w-full max-w-md bg-[#0a0a0a] border border-neutral-700 rounded-xl shadow-2xl p-6 relative">
+                     <button onClick={() => setInfoItem(null)} className="absolute top-4 right-4 text-neutral-500 hover:text-white">
+                        <X size={16} />
+                     </button>
+                     <div className="flex flex-col items-center mb-6">
+                         <div className="w-20 h-20 bg-neutral-900 rounded-2xl border border-white/10 flex items-center justify-center mb-4 shadow-lg">
+                             {infoItem.type === 'folder' ? <Folder size={40} className="text-primary" /> : infoItem.type === 'text' ? <FileText size={40} className="text-neutral-400" /> : <Music size={40} className="text-neutral-400" />}
+                         </div>
+                         <h3 className="text-lg font-bold text-white">{infoItem.name}</h3>
+                         <span className="text-xs text-neutral-500 font-mono uppercase">{infoItem.type}</span>
+                     </div>
+                     
+                     <div className="space-y-3 bg-white/5 rounded-xl p-4 border border-white/5">
+                         <div className="flex justify-between text-sm">
+                             <span className="text-neutral-500">Size</span>
+                             <span className="text-white font-mono">{infoItem.size}</span>
+                         </div>
+                         <div className="flex justify-between text-sm">
+                             <span className="text-neutral-500">Created</span>
+                             <span className="text-white font-mono">{infoItem.created}</span>
+                         </div>
+                         <div className="flex justify-between text-sm">
+                             <span className="text-neutral-500">Format</span>
+                             <span className="text-white font-mono">{infoItem.format || 'N/A'}</span>
+                         </div>
+                          <div className="flex justify-between text-sm">
+                             <span className="text-neutral-500">Location</span>
+                             <span className="text-white font-mono">{infoItem.parentId ? 'Subfolder' : 'Root'}</span>
+                         </div>
+                     </div>
+                 </div>
+            </div>
+        )}
+
+        {/* CONTEXT MENU */}
         {contextMenu && (
             <div 
                 ref={menuRef}
                 className="fixed z-[100] w-48 bg-[#0a0a0a] border border-neutral-700 shadow-[0_10px_40px_rgba(0,0,0,0.8)] rounded-lg py-1.5 text-xs font-medium backdrop-blur-xl animate-in fade-in zoom-in-95 duration-100 origin-top-left"
                 style={{ top: contextMenu.y, left: contextMenu.x }}
-                onClick={(e) => e.stopPropagation()} // Prevent click from closing immediately via document listener
+                onClick={(e) => e.stopPropagation()}
             >
                 {/* FILE CONTEXT MENU */}
                 {contextMenu.type === 'file' && (
                     <>
                         <div className="px-2 py-1 text-[10px] font-mono text-neutral-500 uppercase tracking-wider opacity-50 mb-1">
-                            Actions
+                            {items.find(i => i.id === contextMenu.targetId)?.name}
                         </div>
-                        <ContextMenuItem icon={<Eye size={14} />} label="Preview" />
-                        <ContextMenuItem icon={<Download size={14} />} label="Download" />
+                        {items.find(i => i.id === contextMenu.targetId)?.type === 'audio' && (
+                            <ContextMenuItem icon={<Play size={14} />} label="Play" onClick={() => { handlePlay(items.find(i => i.id === contextMenu.targetId)!); setContextMenu(null); }} />
+                        )}
+                        {items.find(i => i.id === contextMenu.targetId)?.type === 'text' && (
+                            <ContextMenuItem icon={<Edit size={14} />} label="Edit Text" onClick={() => { openTextEditor(items.find(i => i.id === contextMenu.targetId)!); }} />
+                        )}
+                        
                         <ContextMenuItem icon={<Copy size={14} />} label="Copy Link" />
                         <div className="h-px bg-white/10 my-1 mx-2" />
-                        <ContextMenuItem icon={<Edit size={14} />} label="Rename" />
-                        <ContextMenuItem icon={<FolderInput size={14} />} label="Move to..." />
+                        <ContextMenuItem icon={<Edit size={14} />} label="Rename" onClick={() => handleStartRename(items.find(i => i.id === contextMenu.targetId)!)} />
                         <div className="h-px bg-white/10 my-1 mx-2" />
-                        <ContextMenuItem icon={<Info size={14} />} label="Get Info" />
-                        <ContextMenuItem icon={<Trash2 size={14} />} label="Delete" className="text-red-400 hover:bg-red-500/10 hover:text-red-400" />
+                        <ContextMenuItem icon={<Info size={14} />} label="Get Info" onClick={() => openInfo(items.find(i => i.id === contextMenu.targetId)!)} />
+                        <ContextMenuItem icon={<Trash2 size={14} />} label="Delete" className="text-red-400 hover:bg-red-500/10 hover:text-red-400" onClick={() => handleDelete(contextMenu.targetId!)} />
                     </>
                 )}
 
                 {/* FOLDER CONTEXT MENU */}
                 {contextMenu.type === 'folder' && (
                     <>
-                        <ContextMenuItem icon={<Folder size={14} />} label="Open" />
-                        <ContextMenuItem icon={<Share size={14} />} label="Share" />
+                        <div className="px-2 py-1 text-[10px] font-mono text-neutral-500 uppercase tracking-wider opacity-50 mb-1">
+                            Folder Actions
+                        </div>
+                        <ContextMenuItem icon={<Folder size={14} />} label="Open" onClick={() => handleNavigate(contextMenu.targetId!)} />
                         <div className="h-px bg-white/10 my-1 mx-2" />
-                        <ContextMenuItem icon={<Edit size={14} />} label="Rename" />
-                        <ContextMenuItem icon={<Download size={14} />} label="Download .zip" />
+                        <ContextMenuItem icon={<Edit size={14} />} label="Rename" onClick={() => handleStartRename(items.find(i => i.id === contextMenu.targetId)!)} />
                         <div className="h-px bg-white/10 my-1 mx-2" />
-                        <ContextMenuItem icon={<Trash2 size={14} />} label="Delete" className="text-red-400 hover:bg-red-500/10 hover:text-red-400" />
+                        <ContextMenuItem icon={<Info size={14} />} label="Get Info" onClick={() => openInfo(items.find(i => i.id === contextMenu.targetId)!)} />
+                        <ContextMenuItem icon={<Trash2 size={14} />} label="Delete" className="text-red-400 hover:bg-red-500/10 hover:text-red-400" onClick={() => handleDelete(contextMenu.targetId!)} />
                     </>
                 )}
 
                 {/* BACKGROUND CONTEXT MENU */}
                 {contextMenu.type === 'background' && (
                     <>
-                        <ContextMenuItem icon={<Folder size={14} />} label="New Folder" />
-                        <ContextMenuItem icon={<File size={14} />} label="New Text File" />
+                        <ContextMenuItem icon={<Folder size={14} />} label="New Folder" onClick={handleCreateFolder} />
+                        <ContextMenuItem icon={<FileText size={14} />} label="New Text File" onClick={handleCreateTextFile} />
                         <div className="h-px bg-white/10 my-1 mx-2" />
-                        <ContextMenuItem icon={<Upload size={14} />} label="Upload Files" />
-                        <ContextMenuItem icon={<ArrowUpDown size={14} />} label="Sort By" />
-                        <ContextMenuItem icon={<Filter size={14} />} label="Filter" />
-                        <div className="h-px bg-white/10 my-1 mx-2" />
-                        <ContextMenuItem icon={<Info size={14} />} label="Properties" />
+                        <ContextMenuItem icon={<UploadIcon size={14} />} label="Upload Files" />
+                        {currentFolderId && (
+                             <ContextMenuItem icon={<CornerDownLeft size={14} />} label="Back Up" onClick={handleNavigateUp} />
+                        )}
                     </>
                 )}
             </div>
@@ -339,5 +790,10 @@ const ContextMenuItem: React.FC<ContextMenuItemProps> = ({ icon, label, classNam
         <span>{label}</span>
     </button>
 )
+
+// Helper icon for back navigation in context menu
+const CornerDownLeft = ({size, className}: {size:number, className?: string}) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="9 10 4 15 9 20"></polyline><path d="M20 4v7a4 4 0 0 1-4 4H4"></path></svg>
+);
 
 export default UploadPage;
